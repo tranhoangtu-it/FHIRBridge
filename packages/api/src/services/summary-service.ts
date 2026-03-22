@@ -1,12 +1,13 @@
 /**
  * Summary service — orchestrates deidentify → AI generation → format.
- * Uses in-memory Map store (MVP, TTL 10 min).
+ * Supports Redis-backed store (optional) with in-memory fallback.
  * No PHI in logs — only hashed IDs and counts.
  */
 
 import { randomUUID } from 'node:crypto';
 import { ProviderGateway, formatMarkdown } from '@fhirbridge/core';
 import type { Bundle, SummaryConfig, PatientSummary } from '@fhirbridge/types';
+import type { IRedisStore } from './redis-store.js';
 
 export interface SummaryRequestOptions {
   language?: 'en' | 'vi' | 'ja';
@@ -30,16 +31,9 @@ export interface SummaryRecord {
   createdAt: number;
 }
 
-/** In-memory store with TTL eviction (10 minutes) */
-const summaryStore = new Map<string, SummaryRecord>();
-const STORE_TTL_MS = 10 * 60 * 1000;
-
-function evictExpired(): void {
-  const now = Date.now();
-  for (const [key, record] of summaryStore.entries()) {
-    if (now - record.createdAt > STORE_TTL_MS) summaryStore.delete(key);
-  }
-}
+/** TTL for summary records: 10 minutes */
+const SUMMARY_TTL_SECONDS = 10 * 60;
+const STORE_TTL_MS = SUMMARY_TTL_SECONDS * 1000;
 
 /** Resolve AI provider name to SummaryConfig-compatible provider name */
 function resolveProvider(provider?: string): 'claude' | 'openai' {
@@ -48,11 +42,15 @@ function resolveProvider(provider?: string): 'claude' | 'openai' {
 }
 
 /** Build a full SummaryConfig from partial options */
-function buildSummaryConfig(options: SummaryRequestOptions = {}, hmacSecret: string): SummaryConfig {
+function buildSummaryConfig(
+  options: SummaryRequestOptions = {},
+  hmacSecret: string,
+): SummaryConfig {
   const providerName = resolveProvider(options.provider);
-  const apiKey = providerName === 'openai'
-    ? (process.env['OPENAI_API_KEY'] ?? '')
-    : (process.env['ANTHROPIC_API_KEY'] ?? '');
+  const apiKey =
+    providerName === 'openai'
+      ? (process.env['OPENAI_API_KEY'] ?? '')
+      : (process.env['ANTHROPIC_API_KEY'] ?? '');
 
   return {
     language: options.language ?? 'en',
@@ -71,23 +69,54 @@ function buildSummaryConfig(options: SummaryRequestOptions = {}, hmacSecret: str
 }
 
 export class SummaryService {
+  private readonly memStore = new Map<string, SummaryRecord>();
+  private readonly redis: IRedisStore | null;
+
+  constructor(redisStore?: IRedisStore) {
+    this.redis = redisStore ?? null;
+  }
+
+  private async storeRecord(summaryId: string, record: SummaryRecord): Promise<void> {
+    if (this.redis) {
+      await this.redis.set(summaryId, record, SUMMARY_TTL_SECONDS);
+    } else {
+      this.memStore.set(summaryId, record);
+    }
+  }
+
+  private async loadRecord(summaryId: string): Promise<SummaryRecord | undefined> {
+    if (this.redis) {
+      return this.redis.get<SummaryRecord>(summaryId);
+    }
+    return this.memStore.get(summaryId);
+  }
+
+  private evictExpiredMemory(): void {
+    const now = Date.now();
+    for (const [key, record] of this.memStore.entries()) {
+      if (now - record.createdAt > STORE_TTL_MS) this.memStore.delete(key);
+    }
+  }
+
   /** Start async summary generation. Returns summaryId immediately. */
   async startGeneration(request: SummaryRequest): Promise<string> {
     const summaryId = randomUUID();
-    summaryStore.set(summaryId, { status: 'processing', createdAt: Date.now() });
-    this.runGeneration(summaryId, request).catch(() => { /* stored in record */ });
+    await this.storeRecord(summaryId, { status: 'processing', createdAt: Date.now() });
+    this.runGeneration(summaryId, request).catch(() => {
+      /* stored in record */
+    });
     return summaryId;
   }
 
   /** Get current status of a summary job */
-  getStatus(summaryId: string): SummaryRecord | undefined {
-    evictExpired();
-    return summaryStore.get(summaryId);
+  async getStatus(summaryId: string): Promise<SummaryRecord | undefined> {
+    this.evictExpiredMemory();
+    return this.loadRecord(summaryId);
   }
 
   /** Internal: run the full AI pipeline */
   private async runGeneration(summaryId: string, request: SummaryRequest): Promise<void> {
-    const record = summaryStore.get(summaryId)!;
+    const record = (await this.loadRecord(summaryId))!;
     try {
       const config = buildSummaryConfig(request.summaryConfig, request.hmacSecret);
       const gateway = new ProviderGateway(config);
@@ -96,11 +125,11 @@ export class SummaryService {
       record.summary = summary;
       record.formattedMarkdown = formatMarkdown(summary);
       record.status = 'complete';
-      summaryStore.set(summaryId, record);
+      await this.storeRecord(summaryId, record);
     } catch (err) {
       record.status = 'failed';
       record.error = err instanceof Error ? err.message : 'Summary generation failed';
-      summaryStore.set(summaryId, record);
+      await this.storeRecord(summaryId, record);
     }
   }
 }

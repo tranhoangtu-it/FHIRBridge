@@ -14,11 +14,13 @@ import { authPlugin } from './plugins/auth-plugin.js';
 import { corsPlugin } from './plugins/cors-plugin.js';
 import { rateLimiterPlugin } from './plugins/rate-limiter-plugin.js';
 import { requestIdPlugin } from './plugins/request-id-plugin.js';
+import { billingRoutes } from './routes/billing-routes.js';
 import { connectorRoutes } from './routes/connector-routes.js';
 import { exportRoutes } from './routes/export-routes.js';
 import { healthRoutes } from './routes/health-routes.js';
 import { summaryRoutes } from './routes/summary-routes.js';
-import { AuditService } from './services/audit-service.js';
+import { AuditService, ConsoleAuditSink } from './services/audit-service.js';
+import { PostgresAuditSink } from './services/postgres-audit-sink.js';
 
 /** Max upload size for multipart (50 MB) */
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
@@ -36,7 +38,19 @@ export async function createServer(config: ApiConfig): Promise<FastifyInstance> 
     trustProxy: config.trustProxy ?? false,
   });
 
-  const auditService = new AuditService();
+  // Choose audit sink based on config
+  let postgresAuditSink: PostgresAuditSink | null = null;
+  let auditSink: ConstructorParameters<typeof AuditService>[0] = new ConsoleAuditSink();
+
+  if (config.databaseUrl) {
+    postgresAuditSink = new PostgresAuditSink(config.databaseUrl);
+    auditSink = postgresAuditSink;
+    fastify.log.info('[Server] using PostgresAuditSink');
+  } else {
+    fastify.log.info('[Server] using ConsoleAuditSink (no DATABASE_URL configured)');
+  }
+
+  const auditService = new AuditService(auditSink);
 
   // 1. Request ID — must be first so subsequent plugins/hooks have it
   await fastify.register(requestIdPlugin);
@@ -53,7 +67,8 @@ export async function createServer(config: ApiConfig): Promise<FastifyInstance> 
   await fastify.register(authPlugin, { config });
 
   // 5. Rate limiter — runs after auth so user tier is available
-  await fastify.register(rateLimiterPlugin);
+  //    Pass redisUrl so it uses distributed rate limiting when available
+  await fastify.register(rateLimiterPlugin, { redisUrl: config.redisUrl });
 
   // 6. Audit — onResponse hook, after all request processing
   await fastify.register(auditPlugin, { config, auditService });
@@ -63,9 +78,18 @@ export async function createServer(config: ApiConfig): Promise<FastifyInstance> 
   await fastify.register(exportRoutes);
   await fastify.register(connectorRoutes);
   await fastify.register(summaryRoutes, { config });
+  await fastify.register(billingRoutes);
 
   // Centralized error handler
   registerErrorHandler(fastify);
+
+  // Graceful shutdown for Postgres audit sink
+  if (postgresAuditSink) {
+    const sink = postgresAuditSink;
+    fastify.addHook('onClose', async () => {
+      await sink.shutdown();
+    });
+  }
 
   return fastify;
 }

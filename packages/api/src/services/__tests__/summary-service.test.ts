@@ -40,7 +40,7 @@ describe('SummaryService.startGeneration', () => {
       bundle: buildMinimalBundle(),
       hmacSecret: 'test-hmac-secret',
     });
-    const record = svc.getStatus(id);
+    const record = await svc.getStatus(id);
     expect(record).toBeDefined();
     // Status is either processing (hasn't run yet) or failed (no API key in test env)
     expect(['processing', 'failed', 'complete']).toContain(record!.status);
@@ -58,9 +58,9 @@ describe('SummaryService.startGeneration', () => {
 });
 
 describe('SummaryService.getStatus', () => {
-  it('returns undefined for a non-existent summaryId', () => {
+  it('returns undefined for a non-existent summaryId', async () => {
     const svc = new SummaryService();
-    expect(svc.getStatus('no-such-id')).toBeUndefined();
+    expect(await svc.getStatus('no-such-id')).toBeUndefined();
   });
 
   it('returns the record for a valid summaryId', async () => {
@@ -69,7 +69,7 @@ describe('SummaryService.getStatus', () => {
       bundle: buildMinimalBundle(),
       hmacSecret: 'test-secret',
     });
-    const record = svc.getStatus(id);
+    const record = await svc.getStatus(id);
     expect(record).toBeDefined();
     expect(record!.createdAt).toBeLessThanOrEqual(Date.now());
   });
@@ -85,7 +85,7 @@ describe('SummaryService.getStatus', () => {
     // Give the async pipeline time to fail without a real API key
     await new Promise<void>((r) => setTimeout(r, 200));
 
-    const record = svc.getStatus(id);
+    const record = await svc.getStatus(id);
     expect(record).toBeDefined();
     // In test environment (no ANTHROPIC_API_KEY), generation fails
     expect(['failed', 'processing', 'complete']).toContain(record!.status);
