@@ -1,12 +1,14 @@
 /**
- * Excel (.xlsx) file connector using SheetJS (xlsx package).
- * Iterates rows as RawRecords without loading the full workbook.
+ * Excel (.xlsx) file connector using ExcelJS.
+ * Iterates rows as RawRecords without loading the full workbook into memory.
  * Streams row-by-row after initial workbook header read.
+ *
+ * Replaces SheetJS (xlsx@0.18.5) which had unpatched ReDoS + Prototype Pollution CVEs.
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import type { ConnectorConfig, FileImportConfig } from '@fhirbridge/types';
 import type { HisConnector, RawRecord, ConnectionStatus } from './his-connector-interface.js';
 import { ConnectorError } from './his-connector-interface.js';
@@ -16,7 +18,7 @@ export class ExcelConnector implements HisConnector {
   readonly type = 'excel' as const;
 
   private config: FileImportConfig | null = null;
-  private workbook: XLSX.WorkBook | null = null;
+  private workbook: ExcelJS.Workbook | null = null;
 
   async connect(config: ConnectorConfig): Promise<void> {
     if (config.type !== 'excel') {
@@ -30,12 +32,9 @@ export class ExcelConnector implements HisConnector {
 
     this.config = { ...config, filePath: resolved };
 
-    // Read workbook in stream-friendly mode (read headers only first)
-    this.workbook = XLSX.readFile(resolved, {
-      type: 'file',
-      cellDates: true,
-      dense: false,
-    });
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(resolved);
+    this.workbook = wb;
   }
 
   async testConnection(): Promise<ConnectionStatus> {
@@ -43,10 +42,10 @@ export class ExcelConnector implements HisConnector {
       return { connected: false, error: 'Not connected', checkedAt: new Date().toISOString() };
     }
 
-    const sheetNames = this.workbook.SheetNames;
+    const sheetNames = this.getSheetNames();
     return {
       connected: sheetNames.length > 0,
-      serverVersion: `XLSX (${sheetNames.length} sheet(s): ${sheetNames.join(', ')})`,
+      serverVersion: `ExcelJS (${sheetNames.length} sheet(s): ${sheetNames.join(', ')})`,
       checkedAt: new Date().toISOString(),
     };
   }
@@ -59,39 +58,55 @@ export class ExcelConnector implements HisConnector {
     const { filePath, sheetName, mapping, patientIdColumn } = this.config;
     const source = `excel:${path.basename(filePath)}`;
 
-    // Resolve sheet
-    const targetSheet = sheetName ?? this.workbook.SheetNames[0];
-    if (!targetSheet) {
+    // Resolve sheet name — default to first sheet
+    const targetSheetName = sheetName ?? this.getSheetNames()[0];
+    if (!targetSheetName) {
       throw new ConnectorError('No sheets found in workbook', 'NO_SHEET');
     }
 
-    const sheet = this.workbook.Sheets[targetSheet];
+    const sheet = this.workbook.getWorksheet(targetSheetName);
     if (!sheet) {
-      throw new ConnectorError(`Sheet not found: ${targetSheet}`, 'SHEET_NOT_FOUND');
+      throw new ConnectorError(`Sheet not found: ${targetSheetName}`, 'SHEET_NOT_FOUND');
     }
 
-    // Convert to array of objects (header row → keys)
-    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
-      defval: '',
-      raw: false, // Return formatted strings for dates
+    // Extract headers from row 1
+    const headerRow = sheet.getRow(1);
+    const headers: string[] = [];
+    headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+      headers[colNumber - 1] = String(cell.value ?? '').trim();
     });
 
+    // Collect all data rows synchronously (eachRow is sync), then yield async
+    const pending: RawRecord[] = [];
     let rowIndex = 0;
-    for (const row of rows) {
+
+    sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+      if (rowNumber === 1) return; // skip header
       rowIndex++;
 
-      // Normalize cell values (dates, numbers, strings)
-      const normalized = normalizeCells(row);
+      const rawRow: Record<string, unknown> = {};
+      row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+        const header = headers[colNumber - 1];
+        if (header) {
+          rawRow[header] = cell.value;
+        }
+      });
+
+      const normalized = normalizeCells(rawRow);
 
       // Filter by patient ID if specified
       if (patientIdColumn && normalized[patientIdColumn] !== patientId) {
-        continue;
+        return;
       }
 
       const records = mapRow(normalized, mapping, source, rowIndex);
       for (const record of records) {
-        yield record;
+        pending.push(record);
       }
+    });
+
+    for (const record of pending) {
+      yield record;
     }
   }
 
@@ -102,11 +117,16 @@ export class ExcelConnector implements HisConnector {
 
   /** Return available sheet names */
   getSheetNames(): string[] {
-    return this.workbook?.SheetNames ?? [];
+    if (!this.workbook) return [];
+    const names: string[] = [];
+    this.workbook.eachSheet((sheet) => {
+      names.push(sheet.name);
+    });
+    return names;
   }
 }
 
-/** Normalize cell values: trim strings, convert Date objects to ISO strings */
+/** Normalize cell values: trim strings, convert Date objects to ISO strings, unwrap ExcelJS rich text/formula */
 function normalizeCells(row: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = {};
 
@@ -115,6 +135,16 @@ function normalizeCells(row: Record<string, unknown>): Record<string, unknown> {
       result[key] = value.toISOString().slice(0, 10); // YYYY-MM-DD
     } else if (typeof value === 'string') {
       result[key] = value.trim();
+    } else if (value !== null && typeof value === 'object' && 'richText' in value) {
+      // ExcelJS rich text object — extract plain text
+      const richText = (value as { richText: { text: string }[] }).richText;
+      result[key] = richText
+        .map((r) => r.text)
+        .join('')
+        .trim();
+    } else if (value !== null && typeof value === 'object' && 'result' in value) {
+      // ExcelJS formula cell — use computed result
+      result[key] = (value as { result: unknown }).result;
     } else {
       result[key] = value;
     }
