@@ -6,12 +6,14 @@ export const API_BASE_URL: string =
   (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_API_URL ?? '/api';
 
 export const ROUTES = {
-  DASHBOARD: '/',
-  EXPORT: '/export',
-  IMPORT: '/import',
-  SUMMARY: '/summary/:id',
-  SUMMARY_VIEW: (id: string) => `/summary/${id}`,
-  SETTINGS: '/settings',
+  LANDING: '/',
+  GITHUB: 'https://github.com/tranhoangtu-it/FHIRBridge',
+  DASHBOARD: '/app/dashboard',
+  EXPORT: '/app/export',
+  IMPORT: '/app/import',
+  SUMMARY: '/app/summary/:id',
+  SUMMARY_VIEW: (id: string) => `/app/summary/${id}`,
+  SETTINGS: '/app/settings',
 } as const;
 
 export const POLLING_INTERVAL_MS = 2000;
