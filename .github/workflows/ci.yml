@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: fhirbridge_test
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: fhirbridge_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U fhirbridge_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit Tests
+        run: pnpm test
+
+      - name: Integration Tests
+        run: pnpm test:integration
+        env:
+          PORT: 3002
+          HOST: 0.0.0.0
+          JWT_SECRET: ci-jwt-secret-for-testing-only-minimum-32chars
+          HMAC_SECRET: ci-hmac-secret-for-testing-only-minimum-32ch
+          API_KEYS: test-key-free,test-key-paid
+          DATABASE_URL: postgresql://fhirbridge_test:testpass@localhost:5433/fhirbridge_test
+          REDIS_URL: redis://localhost:6380
+          LOG_LEVEL: silent
+          NODE_ENV: test
+
+      - name: CLI E2E Tests
+        run: pnpm test:e2e:cli
+        env:
+          NO_COLOR: '1'
+
+      - name: Security Tests
+        run: pnpm test:security
+        env:
+          JWT_SECRET: ci-jwt-secret-for-testing-only-minimum-32chars
+          HMAC_SECRET: ci-hmac-secret-for-testing-only-minimum-32ch
+          API_KEYS: test-key-free,test-key-paid
+          LOG_LEVEL: silent
