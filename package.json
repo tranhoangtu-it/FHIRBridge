@@ -18,6 +18,7 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md}\" --ignore-path .gitignore",
     "prepare": "husky",
     "test:integration": "vitest run --project integration",
+    "test:e2e:cli": "vitest run --project cli-e2e",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:security": "vitest run --config vitest.security.config.ts",

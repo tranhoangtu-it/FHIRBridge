@@ -51,12 +51,13 @@ async function runExport(opts: ExportOptions): Promise<void> {
     endpoint = profileData.baseUrl;
   }
 
-  // Interactive prompts for missing required args
+  // Interactive prompts for missing required args.
+  // Pass empty string for outputPath (meaning stdout) to avoid requiring TTY in non-interactive mode.
   const resolved = await promptExportOptions({
     endpoint,
     patientId: opts.patientId,
     format: opts.format as 'json' | 'ndjson' | undefined,
-    outputPath: opts.output,
+    outputPath: opts.output ?? '',
   });
 
   info(`Connecting to ${resolved.endpoint}`);
@@ -71,9 +72,13 @@ async function runExport(opts: ExportOptions): Promise<void> {
 
     // Dynamic import — connector package may not exist in all environments
     // Use unknown cast to avoid missing module type errors
-    const connectorModule = await import('@fhirbridge/connectors' as string).catch(() => null) as Record<string, unknown> | null;
+    const connectorModule = (await import('@fhirbridge/connectors' as string).catch(
+      () => null,
+    )) as Record<string, unknown> | null;
     if (connectorModule && 'FhirEndpointConnector' in connectorModule) {
-      const ConnectorClass = connectorModule['FhirEndpointConnector'] as new (cfg: { baseUrl: string }) => {
+      const ConnectorClass = connectorModule['FhirEndpointConnector'] as new (cfg: {
+        baseUrl: string;
+      }) => {
         fetchPatientBundle(id: string): Promise<Resource[]>;
       };
       const connector = new ConnectorClass({ baseUrl: resolved.endpoint });
@@ -100,10 +105,7 @@ async function runExport(opts: ExportOptions): Promise<void> {
   progress.update(4);
   info('Serializing...');
 
-  const output =
-    resolved.format === 'ndjson'
-      ? serializeToNdjson(bundle)
-      : serializeToJson(bundle);
+  const output = resolved.format === 'ndjson' ? serializeToNdjson(bundle) : serializeToJson(bundle);
 
   progress.update(5);
   progress.stop();
