@@ -1,0 +1,43 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    groups:
+      production-deps:
+        patterns:
+          - 'fastify*'
+          - '@fastify/*'
+          - 'ioredis'
+          - 'pg'
+          - 'stripe'
+        update-types:
+          - 'minor'
+          - 'patch'
+      dev-deps:
+        patterns:
+          - 'vitest'
+          - '@playwright/*'
+          - 'typescript'
+          - 'eslint*'
+          - 'prettier'
+        update-types:
+          - 'minor'
+          - 'patch'
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+    labels:
+      - 'dependencies'
+    reviewers:
+      - 'tranhoangtu-it'
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    labels:
+      - 'ci'

@@ -44,25 +44,25 @@ describe('AppSidebar', () => {
   it('Dashboard link points to "/"', () => {
     renderSidebar();
     const link = screen.getByRole('link', { name: /dashboard/i });
-    expect(link).toHaveAttribute('href', '/');
+    expect(link).toHaveAttribute('href', '/app/dashboard');
   });
 
   it('Export link points to "/export"', () => {
     renderSidebar();
     const link = screen.getByRole('link', { name: /export/i });
-    expect(link).toHaveAttribute('href', '/export');
+    expect(link).toHaveAttribute('href', '/app/export');
   });
 
   it('Import link points to "/import"', () => {
     renderSidebar();
     const link = screen.getByRole('link', { name: /import/i });
-    expect(link).toHaveAttribute('href', '/import');
+    expect(link).toHaveAttribute('href', '/app/import');
   });
 
   it('Settings link points to "/settings"', () => {
     renderSidebar();
     const link = screen.getByRole('link', { name: /settings/i });
-    expect(link).toHaveAttribute('href', '/settings');
+    expect(link).toHaveAttribute('href', '/app/settings');
   });
 
   it('shows "Checking…" when healthOk is undefined', () => {
