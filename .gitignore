@@ -61,3 +61,10 @@ pnpm-debug.yaml
 
 # Generated fixtures (recreated by scripts)
 tests/fixtures/excel/generate-fixture.cjs
+
+# Playwright E2E test artifacts
+tests/e2e/test-results/
+tests/e2e/screenshots/
+tests/perf/lighthouse-reports/
+playwright-report/
+blob-report/
