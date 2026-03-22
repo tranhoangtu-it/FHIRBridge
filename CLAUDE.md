@@ -30,11 +30,17 @@ packages/
 ## Commands
 
 ```bash
-pnpm install          # Install dependencies
-pnpm build            # Build all packages
-pnpm typecheck        # TypeScript type checking
-pnpm test             # Run all tests
-pnpm dev              # Start dev servers
+pnpm install              # Install dependencies
+pnpm build                # Build all packages
+pnpm typecheck            # TypeScript type checking
+pnpm test                 # Run 913 unit tests
+pnpm test:integration     # 54 API integration tests
+pnpm test:e2e:cli         # 24 CLI E2E tests
+pnpm test:e2e             # Playwright E2E (needs Docker)
+pnpm test:security        # Security penetration tests
+pnpm test:perf            # Performance benchmarks
+pnpm test:all             # All suites (fail-fast)
+pnpm dev                  # Start dev servers
 
 # Per-package
 pnpm --filter @fhirbridge/core test
@@ -77,6 +83,27 @@ pnpm --filter @fhirbridge/web dev
 - Providers: Stripe (international) + SePay/VietQR (Vietnam)
 - Quota enforcement: 402 Payment Required on exceeded limits
 - Webhook verification: Stripe signature + SePay HMAC-SHA256
+
+## Testing
+
+```bash
+pnpm test               # 913 unit tests (Vitest)
+pnpm test:integration   # 54 API integration tests (server.inject, no Docker)
+pnpm test:e2e:cli       # 24 CLI E2E tests (real subprocess)
+pnpm test:e2e           # 53 Playwright E2E (needs Docker + running servers)
+pnpm test:security      # 40 security tests (XSS, SSRF, auth bypass)
+pnpm test:perf          # 17 performance benchmarks
+pnpm test:all           # All suites sequential (fail-fast)
+```
+
+- **Unit tests**: stub external deps (AI providers, Stripe, HTTP), test orchestration logic
+- **Integration tests**: real Fastify server via `server.inject()`, in-memory stores
+- **CLI E2E**: spawn `node packages/cli/bin/fhirbridge.js` as subprocess, capture stdout/stderr/exitCode
+- **Playwright E2E**: 3 browsers (Chromium, Firefox, WebKit) x 2 viewports (desktop, tablet)
+- **Security**: XSS injection, JWT bypass, SSRF deep test, file upload attacks, header hardening
+- **Performance**: API latency p95, CSV import scaling, rate limiter stress, memory leak detection
+- Docker test profile: `docker/docker-compose.test.yml` (Postgres:5433, Redis:6380)
+- Test env: `.env.test`
 
 ## Key Files
 
