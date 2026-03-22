@@ -1,0 +1,28 @@
+version: '3.9'
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    container_name: fhirbridge_postgres_test
+    environment:
+      POSTGRES_USER: fhirbridge_test
+      POSTGRES_PASSWORD: testpass
+      POSTGRES_DB: fhirbridge_test
+    ports:
+      - '5433:5432'
+    volumes:
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U fhirbridge_test']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+  redis-test:
+    image: redis:7-alpine
+    container_name: fhirbridge_redis_test
+    ports:
+      - '6380:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
