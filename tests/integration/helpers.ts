@@ -1,0 +1,71 @@
+/**
+ * Integration test helpers.
+ * Provides a pre-configured test server and JWT factory functions.
+ * No Docker required — uses ConsoleAuditSink and in-memory stores.
+ */
+
+import { sign } from 'jsonwebtoken';
+import type { FastifyInstance } from 'fastify';
+import { createServer } from '../../packages/api/src/server.js';
+import type { ApiConfig } from '../../packages/api/src/config.js';
+
+export const TEST_JWT_SECRET = 'test-jwt-secret-for-testing-only-min32chars';
+export const TEST_HMAC_SECRET = 'test-hmac-secret-for-testing-only-min32ch';
+
+export const TEST_CONFIG: ApiConfig = {
+  port: 3002,
+  host: '0.0.0.0',
+  jwtSecret: TEST_JWT_SECRET,
+  hmacSecret: TEST_HMAC_SECRET,
+  apiKeys: ['test-key-free', 'test-key-paid'],
+  corsOrigins: ['http://localhost:4173'],
+  logLevel: 'silent',
+  trustProxy: false,
+  // No databaseUrl / redisUrl — uses in-memory fallbacks
+};
+
+/** Create and return a ready Fastify instance using test config */
+export async function createTestServer(): Promise<FastifyInstance> {
+  const server = await createServer(TEST_CONFIG);
+  await server.ready();
+  return server;
+}
+
+/** Sign a JWT with an arbitrary payload */
+export function makeJwt(
+  payload: Record<string, unknown>,
+  secret: string = TEST_JWT_SECRET,
+  options: { expiresIn?: string | number } = { expiresIn: '1h' },
+): string {
+  return sign(payload, secret, options as Parameters<typeof sign>[2]);
+}
+
+/** JWT for a free-tier user */
+export function freeUserJwt(): string {
+  return makeJwt({ id: 'user-free', tier: 'free' });
+}
+
+/** JWT for a paid-tier user */
+export function paidUserJwt(): string {
+  return makeJwt({ id: 'user-paid', tier: 'paid' });
+}
+
+/** Build Authorization header value */
+export function bearerHeader(token: string): string {
+  return `Bearer ${token}`;
+}
+
+/** Minimal valid FHIR Bundle for summary/export tests */
+export const MINIMAL_BUNDLE = {
+  resourceType: 'Bundle',
+  type: 'collection',
+  entry: [
+    {
+      resource: {
+        resourceType: 'Patient',
+        id: 'test-patient',
+        name: [{ family: 'Doe', given: ['John'] }],
+      },
+    },
+  ],
+};

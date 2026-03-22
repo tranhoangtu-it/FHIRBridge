@@ -6,4 +6,6 @@ export default defineWorkspace([
   'packages/api/vitest.config.ts',
   'packages/cli/vitest.config.ts',
   'packages/web/vitest.config.ts',
+  // Integration tests — run via `pnpm test:integration` (uses --project integration)
+  'tests/integration/vitest.config.ts',
 ]);
