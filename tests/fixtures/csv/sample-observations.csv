@@ -1,0 +1,11 @@
+patient_id,observation_date,loinc_code,display,value,unit,status
+P001,2024-01-10,8480-6,Systolic blood pressure,120,mmHg,final
+P001,2024-01-10,8462-4,Diastolic blood pressure,80,mmHg,final
+P001,2024-01-10,8867-4,Heart rate,72,/min,final
+P001,2024-01-10,8310-5,Body temperature,37.0,Cel,final
+P002,2024-02-14,8480-6,Systolic blood pressure,118,mmHg,final
+P002,2024-02-14,8462-4,Diastolic blood pressure,76,mmHg,final
+P002,2024-02-14,8867-4,Heart rate,68,/min,final
+P003,2024-03-05,8480-6,Systolic blood pressure,135,mmHg,final
+P003,2024-03-05,8462-4,Diastolic blood pressure,88,mmHg,final
+P003,2024-03-05,8867-4,Heart rate,80,/min,final

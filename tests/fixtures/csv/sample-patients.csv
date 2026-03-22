@@ -1,0 +1,6 @@
+patient_id,first_name,last_name,birth_date,gender,phone,address_line,city,state,postal_code
+P001,John,Smith,1985-03-15,male,555-1234,123 Main St,Springfield,IL,62701
+P002,Mary,Johnson,1992-07-22,female,555-5678,456 Oak Ave,Chicago,IL,60601
+P003,Robert,Williams,1970-11-08,male,555-9012,789 Pine Rd,Naperville,IL,60540
+P004,Jennifer,Brown,1988-04-30,female,555-3456,321 Elm St,Rockford,IL,61101
+P005,Michael,Davis,2001-09-17,male,555-7890,654 Maple Dr,Peoria,IL,61602

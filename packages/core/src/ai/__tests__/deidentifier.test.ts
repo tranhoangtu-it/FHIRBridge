@@ -1,0 +1,264 @@
+/**
+ * De-identifier tests.
+ * Verifies ALL PHI is removed and medical codes/values are preserved.
+ * IMPORTANT: No PHI appears in test output — only hashes and structural assertions.
+ */
+
+import { describe, it, expect } from 'vitest';
+import { deidentify, hashIdentifier, shiftDate, reidentifyDates } from '../deidentifier.js';
+import type { Bundle } from '@fhirbridge/types';
+
+const HMAC_SECRET = 'test-secret-do-not-use-in-prod';
+
+/** Build a minimal FHIR Bundle with a patient and some resources */
+function buildTestBundle(): Bundle {
+  return {
+    resourceType: 'Bundle',
+    type: 'collection',
+    entry: [
+      {
+        fullUrl: 'urn:uuid:patient-001',
+        resource: {
+          resourceType: 'Patient',
+          id: 'patient-001',
+          name: [{ family: 'Smith', given: ['John', 'Michael'] }],
+          telecom: [
+            { system: 'phone', value: '555-1234' },
+            { system: 'email', value: 'john.smith@example.com' },
+          ],
+          address: [
+            {
+              line: ['123 Main St'],
+              city: 'Boston',
+              state: 'MA',
+              postalCode: '02101',
+              country: 'US',
+            },
+          ],
+          birthDate: '1980-05-15',
+          gender: 'male',
+          identifier: [{ system: 'http://hospital.com/mrn', value: 'MRN-123456' }],
+        },
+      },
+      {
+        fullUrl: 'urn:uuid:condition-001',
+        resource: {
+          resourceType: 'Condition',
+          id: 'condition-001',
+          subject: { reference: 'Patient/patient-001' },
+          code: {
+            coding: [
+              {
+                system: 'http://snomed.info/sct',
+                code: '44054006',
+                display: 'Type 2 diabetes mellitus',
+              },
+            ],
+            text: 'Type 2 Diabetes',
+          },
+          onsetDateTime: '2020-03-01T10:00:00Z',
+          clinicalStatus: {
+            coding: [{ system: 'http://terminology.hl7.org/CodeSystem/condition-clinical', code: 'active' }],
+          },
+        },
+      },
+      {
+        fullUrl: 'urn:uuid:observation-001',
+        resource: {
+          resourceType: 'Observation',
+          id: 'observation-001',
+          status: 'final',
+          code: {
+            coding: [
+              { system: 'http://loinc.org', code: '29463-7', display: 'Body Weight' },
+            ],
+          },
+          valueQuantity: { value: 85.2, unit: 'kg', system: 'http://unitsofmeasure.org', code: 'kg' },
+          effectiveDateTime: '2023-06-15',
+        },
+      },
+    ],
+  };
+}
+
+describe('hashIdentifier', () => {
+  it('returns a 16-char hex string', () => {
+    const result = hashIdentifier('patient-001', HMAC_SECRET);
+    expect(result).toMatch(/^[0-9a-f]{16}$/);
+  });
+
+  it('is deterministic for the same input', () => {
+    const a = hashIdentifier('patient-001', HMAC_SECRET);
+    const b = hashIdentifier('patient-001', HMAC_SECRET);
+    expect(a).toBe(b);
+  });
+
+  it('produces different hashes for different inputs', () => {
+    const a = hashIdentifier('patient-001', HMAC_SECRET);
+    const b = hashIdentifier('patient-002', HMAC_SECRET);
+    expect(a).not.toBe(b);
+  });
+});
+
+describe('shiftDate', () => {
+  it('shifts a date-only string forward', () => {
+    const result = shiftDate('2020-01-01', 10);
+    expect(result).toBe('2020-01-11');
+  });
+
+  it('shifts a date-only string backward', () => {
+    const result = shiftDate('2020-01-15', -10);
+    expect(result).toBe('2020-01-05');
+  });
+
+  it('preserves datetime format for full ISO strings', () => {
+    const result = shiftDate('2020-03-01T10:00:00.000Z', 5);
+    expect(result).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it('returns original string for invalid dates', () => {
+    expect(shiftDate('not-a-date', 10)).toBe('not-a-date');
+    expect(shiftDate('', 10)).toBe('');
+  });
+
+  it('is reversible', () => {
+    const original = '2020-06-15';
+    const shifted = shiftDate(original, 25);
+    const restored = shiftDate(shifted, -25);
+    expect(restored).toBe(original);
+  });
+});
+
+describe('deidentify', () => {
+  it('removes patient name', () => {
+    const bundle = buildTestBundle();
+    const { bundle: deident } = deidentify(bundle, HMAC_SECRET);
+
+    const patient = deident.entry?.[0]?.resource as Record<string, unknown>;
+    const name = patient?.['name'] as Array<Record<string, unknown>>;
+    expect(name).toBeDefined();
+    expect(name[0]?.['family']).toBe('[PATIENT]');
+    expect((name[0]?.['given'] as string[])?.[0]).toBe('[PATIENT]');
+
+    // Original name must not appear
+    const bundleStr = JSON.stringify(deident);
+    expect(bundleStr).not.toContain('Smith');
+    expect(bundleStr).not.toContain('John');
+    expect(bundleStr).not.toContain('Michael');
+  });
+
+  it('removes telecom (phone/email)', () => {
+    const bundle = buildTestBundle();
+    const { bundle: deident } = deidentify(bundle, HMAC_SECRET);
+
+    const patient = deident.entry?.[0]?.resource as Record<string, unknown>;
+    expect((patient?.['telecom'] as unknown[])?.length).toBe(0);
+
+    const bundleStr = JSON.stringify(deident);
+    expect(bundleStr).not.toContain('555-1234');
+    expect(bundleStr).not.toContain('john.smith@example.com');
+  });
+
+  it('strips address lines and postal code, keeps city/state', () => {
+    const bundle = buildTestBundle();
+    const { bundle: deident } = deidentify(bundle, HMAC_SECRET);
+
+    const patient = deident.entry?.[0]?.resource as Record<string, unknown>;
+    const addresses = patient?.['address'] as Array<Record<string, unknown>>;
+    expect(addresses[0]?.['city']).toBe('Boston');
+    expect(addresses[0]?.['state']).toBe('MA');
+    expect(addresses[0]?.['line']).toBeUndefined();
+    expect(addresses[0]?.['postalCode']).toBeUndefined();
+
+    const bundleStr = JSON.stringify(deident);
+    expect(bundleStr).not.toContain('123 Main St');
+    expect(bundleStr).not.toContain('02101');
+  });
+
+  it('hashes patient ID and MRN', () => {
+    const bundle = buildTestBundle();
+    const { bundle: deident } = deidentify(bundle, HMAC_SECRET);
+
+    const patient = deident.entry?.[0]?.resource as Record<string, unknown>;
+    expect(patient?.['id']).not.toBe('patient-001');
+    expect(patient?.['id']).toMatch(/^[0-9a-f]{16}$/);
+
+    const identifiers = patient?.['identifier'] as Array<Record<string, unknown>>;
+    expect(identifiers[0]?.['value']).not.toBe('MRN-123456');
+    expect(identifiers[0]?.['value']).toMatch(/^[0-9a-f]{16}$/);
+
+    const bundleStr = JSON.stringify(deident);
+    expect(bundleStr).not.toContain('patient-001');
+    expect(bundleStr).not.toContain('MRN-123456');
+  });
+
+  it('shifts dates consistently', () => {
+    const bundle = buildTestBundle();
+    const { bundle: deident, shiftMap } = deidentify(bundle, HMAC_SECRET);
+
+    // shiftMap should have one entry
+    const shifts = Object.values(shiftMap);
+    expect(shifts.length).toBeGreaterThan(0);
+    const offset = shifts[0]!;
+    expect(Math.abs(offset)).toBeLessThanOrEqual(30);
+
+    // Birth date should be shifted
+    const patient = deident.entry?.[0]?.resource as Record<string, unknown>;
+    expect(patient?.['birthDate']).not.toBe('1980-05-15');
+    expect(patient?.['birthDate']).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('preserves medical codes (SNOMED, LOINC)', () => {
+    const bundle = buildTestBundle();
+    const { bundle: deident } = deidentify(bundle, HMAC_SECRET);
+
+    const bundleStr = JSON.stringify(deident);
+    // SNOMED code for diabetes must be preserved
+    expect(bundleStr).toContain('44054006');
+    expect(bundleStr).toContain('http://snomed.info/sct');
+    // LOINC code for body weight must be preserved
+    expect(bundleStr).toContain('29463-7');
+    expect(bundleStr).toContain('http://loinc.org');
+  });
+
+  it('preserves observation valueQuantity', () => {
+    const bundle = buildTestBundle();
+    const { bundle: deident } = deidentify(bundle, HMAC_SECRET);
+
+    const observation = deident.entry?.[2]?.resource as Record<string, unknown>;
+    const valueQuantity = observation?.['valueQuantity'] as Record<string, unknown>;
+    expect(valueQuantity?.['value']).toBe(85.2);
+    expect(valueQuantity?.['unit']).toBe('kg');
+  });
+
+  it('marks bundle as deidentified', () => {
+    const bundle = buildTestBundle();
+    const { bundle: deident } = deidentify(bundle, HMAC_SECRET);
+    expect((deident as Record<string, unknown>)['_deidentified']).toBe(true);
+  });
+
+  it('produces consistent results for same input', () => {
+    const bundle = buildTestBundle();
+    const { bundle: d1 } = deidentify(bundle, HMAC_SECRET);
+    const { bundle: d2 } = deidentify(bundle, HMAC_SECRET);
+    // IDs should be identical (deterministic hashing)
+    const p1 = (d1.entry?.[0]?.resource as Record<string, unknown>)?.['id'];
+    const p2 = (d2.entry?.[0]?.resource as Record<string, unknown>)?.['id'];
+    expect(p1).toBe(p2);
+  });
+});
+
+describe('reidentifyDates', () => {
+  it('reverses date shifts in text', () => {
+    const shiftMap = { 'abc123': 10 };
+    const text = 'Patient was seen on 2020-01-11. Follow-up on 2020-02-01.';
+    const result = reidentifyDates(text, shiftMap);
+    expect(result).toContain('2020-01-01');
+    expect(result).toContain('2020-01-22');
+  });
+
+  it('handles empty shift map', () => {
+    const text = 'Some text with 2020-01-01 in it.';
+    expect(reidentifyDates(text, {})).toBe(text);
+  });
+});

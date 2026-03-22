@@ -1,0 +1,28 @@
+{
+  "name": "@fhirbridge/types",
+  "version": "0.1.0",
+  "description": "Shared FHIR R4 type definitions for FHIRBridge",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "dev": "tsc --project tsconfig.json --watch",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "lint": "eslint src --ext .ts",
+    "test": "vitest run",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  },
+  "devDependencies": {
+    "@types/fhir": "^0.0.37",
+    "typescript": "*",
+    "vitest": "*"
+  },
+  "dependencies": {}
+}
