@@ -35,5 +35,6 @@
     "@types/uuid": "^11.0.0",
     "typescript": "*",
     "vitest": "*"
-  }
+  },
+  "type": "module"
 }

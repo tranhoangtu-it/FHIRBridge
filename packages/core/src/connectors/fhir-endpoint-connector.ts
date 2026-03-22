@@ -5,7 +5,8 @@
  */
 
 import type { ConnectorConfig, FhirEndpointConfig } from '@fhirbridge/types';
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
 const FhirClient = require('fhir-kit-client');
 
 import type { HisConnector, RawRecord, ConnectionStatus } from './his-connector-interface.js';
@@ -44,11 +45,15 @@ export class FhirEndpointConnector implements HisConnector {
 
     try {
       const client = this.client ?? new FhirClient({ baseUrl });
-      const metadata = await withRetry(() => client.capabilityStatement()) as Record<string, unknown>;
+      const metadata = (await withRetry(() => client.capabilityStatement())) as Record<
+        string,
+        unknown
+      >;
 
       return {
         connected: true,
-        serverVersion: typeof metadata['fhirVersion'] === 'string' ? metadata['fhirVersion'] : undefined,
+        serverVersion:
+          typeof metadata['fhirVersion'] === 'string' ? metadata['fhirVersion'] : undefined,
         checkedAt: new Date().toISOString(),
       };
     } catch (err) {
@@ -77,7 +82,9 @@ export class FhirEndpointConnector implements HisConnector {
 
       const bundle: FhirBundle = await withRetry(() => {
         if (nextUrl) {
-          return (this.client as NonNullable<typeof this.client>).request(nextUrl) as Promise<FhirBundle>;
+          return (this.client as NonNullable<typeof this.client>).request(
+            nextUrl,
+          ) as Promise<FhirBundle>;
         }
         return (this.client as NonNullable<typeof this.client>).request(
           `Patient/${encodeURIComponent(patientId)}/$everything?_count=${pageCount}`,
@@ -91,9 +98,10 @@ export class FhirEndpointConnector implements HisConnector {
       // Yield each entry as a RawRecord
       for (const entry of bundle.entry ?? []) {
         if (entry.resource) {
-          const resourceType = typeof entry.resource['resourceType'] === 'string'
-            ? entry.resource['resourceType']
-            : 'Unknown';
+          const resourceType =
+            typeof entry.resource['resourceType'] === 'string'
+              ? entry.resource['resourceType']
+              : 'Unknown';
 
           yield {
             resourceType,

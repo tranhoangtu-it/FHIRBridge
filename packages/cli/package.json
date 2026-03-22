@@ -37,5 +37,6 @@
     "@types/node": "^22.5.0",
     "typescript": "*",
     "vitest": "*"
-  }
+  },
+  "type": "module"
 }
