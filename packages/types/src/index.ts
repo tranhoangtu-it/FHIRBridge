@@ -269,6 +269,17 @@ export type {
   DateShiftMap,
 } from './ai/index.js';
 
+// ── Billing Types ────────────────────────────────────────────────────────────
+export type {
+  BillingTier,
+  PaymentProvider,
+  BillingPlan,
+  UsageRecord,
+  PaymentIntent,
+  BillingConfig,
+  QuotaCheck,
+} from './billing/index.js';
+
 // ── HIS Connector Types ─────────────────────────────────────────────────────
 
 /** HIS connection configuration */

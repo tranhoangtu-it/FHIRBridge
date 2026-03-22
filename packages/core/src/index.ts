@@ -49,7 +49,12 @@ export type {
   ConnectionStatus,
   RawRecord as ConnectorRawRecord,
 } from './connectors/index.js';
-export { ConnectorError, FhirEndpointConnector, CsvConnector, ExcelConnector } from './connectors/index.js';
+export {
+  ConnectorError,
+  FhirEndpointConnector,
+  CsvConnector,
+  ExcelConnector,
+} from './connectors/index.js';
 export { mapRow, withRetry, isRetryable } from './connectors/index.js';
 export type { RetryOptions } from './connectors/index.js';
 
@@ -62,16 +67,25 @@ export { deidentify, reidentifyDates, hashIdentifier, shiftDate } from './ai/dei
 export type { DeidentifyResult } from './ai/deidentifier.js';
 export { summarizeSections } from './ai/section-summarizer.js';
 export { synthesize } from './ai/synthesis-engine.js';
-export {
-  getSectionPrompt,
-  getSynthesisPrompt,
-  isSupportedSection,
-} from './ai/prompt-templates.js';
+export { getSectionPrompt, getSynthesisPrompt, isSupportedSection } from './ai/prompt-templates.js';
 export type { PromptVariables, PromptPair, SectionName } from './ai/prompt-templates.js';
 export { formatMarkdown, formatComposition } from './ai/summary-formatter.js';
 export type { FhirComposition } from './ai/summary-formatter.js';
 export { TokenTracker } from './ai/token-tracker.js';
 export type { TokenRecord, AggregatedTokenUsage } from './ai/token-tracker.js';
+
+// ── Billing ──────────────────────────────────────────────────────────────────
+export { PLANS, getPlan, canExport, canUseSummary, calculateOverageCost } from './billing/index.js';
+export {
+  recordExport,
+  recordSummary,
+  getUsage,
+  resetPeriod,
+  currentPeriod,
+} from './billing/index.js';
+export type { PaymentProviderAdapter, WebhookEvent } from './billing/index.js';
+export { StripeProvider } from './billing/index.js';
+export { SepayProvider } from './billing/index.js';
 
 // ── Coding utilities ─────────────────────────────────────────────────────────
 export {

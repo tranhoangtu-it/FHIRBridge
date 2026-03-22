@@ -39,6 +39,7 @@ module.exports = {
     'import/no-named-as-default-member': 'off',
     'import/no-duplicates': 'off',
     'import/no-cycle': 'off',
+    'import/order': 'off',
     // General
     'no-console': ['warn', { allow: ['warn', 'error'] }],
     'prefer-const': 'error',
