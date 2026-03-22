@@ -5,9 +5,7 @@
  */
 
 import type { PatientSummary } from '@fhirbridge/types';
-
-// TODO: Add PDF output via Puppeteer when @fhirbridge/export package is added.
-// import puppeteer from 'puppeteer';
+export { formatPdf } from './pdf-formatter.js';
 
 /** FHIR R4 Composition resource (minimal shape for type safety) */
 export interface FhirComposition {
@@ -86,10 +84,7 @@ export function formatMarkdown(summary: PatientSummary): string {
  * @param summary - The patient summary to format
  * @param patientRef - FHIR reference to the patient (e.g. 'Patient/[PATIENT]')
  */
-export function formatComposition(
-  summary: PatientSummary,
-  patientRef: string,
-): FhirComposition {
+export function formatComposition(summary: PatientSummary, patientRef: string): FhirComposition {
   const { sections, synthesis, metadata } = summary;
 
   const compositionSections: FhirComposition['section'] = [

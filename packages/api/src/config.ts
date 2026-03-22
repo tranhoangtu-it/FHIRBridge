@@ -23,6 +23,8 @@ export interface ApiConfig {
   hmacSecret: string;
   /** Log level for Fastify/Pino */
   logLevel: string;
+  /** Proxy trust setting — use CIDR range in production, false by default */
+  trustProxy?: boolean | string;
 }
 
 /** Load and validate configuration from environment variables */
@@ -56,5 +58,11 @@ export function loadConfig(): ApiConfig {
     databaseUrl: process.env['DATABASE_URL'],
     redisUrl: process.env['REDIS_URL'],
     logLevel: process.env['LOG_LEVEL'] ?? 'info',
+    trustProxy:
+      process.env['TRUST_PROXY'] === 'true'
+        ? true
+        : process.env['TRUST_PROXY']
+          ? process.env['TRUST_PROXY']
+          : false,
   };
 }

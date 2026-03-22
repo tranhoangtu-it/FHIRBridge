@@ -11,6 +11,7 @@
  */
 
 import { createHmac } from 'node:crypto';
+
 import type { Bundle, BundleEntry, DateShiftMap, DeidentifiedBundle } from '@fhirbridge/types';
 
 /** Maximum date shift in days (±30) */
@@ -87,7 +88,10 @@ function deidentifyResource(
 
     // STRIP: text narrative (contains human-readable PHI in HTML)
     if (key === 'text' && typeof value === 'object' && !Array.isArray(value)) {
-      result[key] = { status: 'empty', div: '<div xmlns="http://www.w3.org/1999/xhtml">[NARRATIVE REDACTED]</div>' };
+      result[key] = {
+        status: 'empty',
+        div: '<div xmlns="http://www.w3.org/1999/xhtml">[NARRATIVE REDACTED]</div>',
+      };
       continue;
     }
 
@@ -207,11 +211,7 @@ function deidentifyResource(
 
     // Recurse into nested objects
     if (typeof value === 'object' && !Array.isArray(value)) {
-      result[key] = deidentifyResource(
-        value as Record<string, unknown>,
-        secret,
-        offsetDays,
-      );
+      result[key] = deidentifyResource(value as Record<string, unknown>, secret, offsetDays);
       continue;
     }
 
@@ -243,9 +243,7 @@ export function deidentify(bundle: Bundle, hmacSecret: string): DeidentifyResult
   const shiftMap: DateShiftMap = {};
 
   // Determine patient ID hash and date shift offset
-  const patientEntry = bundle.entry?.find(
-    (e) => e.resource?.resourceType === 'Patient',
-  );
+  const patientEntry = bundle.entry?.find((e) => e.resource?.resourceType === 'Patient');
   const patientId = patientEntry?.resource?.id ?? 'unknown';
   const patientIdHash = hashIdentifier(patientId, hmacSecret);
 
@@ -292,14 +290,13 @@ export function deidentify(bundle: Bundle, hmacSecret: string): DeidentifyResult
  * NOTE: This modifies de-identified date strings back to approximate originals.
  */
 export function reidentifyDates(text: string, shiftMap: DateShiftMap): string {
-  // Apply inverse shift for each patient in the map
-  let result = text;
-  for (const offset of Object.values(shiftMap)) {
-    // Match ISO date patterns and reverse-shift them
-    result = result.replace(
-      /\b(\d{4}-\d{2}-\d{2}(?:T[\d:.]+Z?)?)\b/g,
-      (match) => shiftDate(match, -offset),
-    );
+  const offsets = Object.values(shiftMap);
+  // Safety: only apply if single patient (multi-patient would corrupt dates)
+  if (offsets.length !== 1) {
+    return text; // Cannot safely reverse dates for multi-patient bundles
   }
-  return result;
+  const offset = offsets[0]!;
+  return text.replace(/\b(\d{4}-\d{2}-\d{2}(?:T[\d:.]+Z?)?)\b/g, (match) =>
+    shiftDate(match, -offset),
+  );
 }

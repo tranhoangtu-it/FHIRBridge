@@ -3,8 +3,9 @@
  * free tier: 10 requests/min, paid tier: 100 requests/min.
  */
 
-import type { FastifyInstance, FastifyRequest } from 'fastify';
 import fastifyRateLimit from '@fastify/rate-limit';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
+
 import { skipOverride } from './plugin-utils.js';
 
 /** Rate limits per tier (requests per minute) */
@@ -22,7 +23,7 @@ async function _rateLimiterPlugin(fastify: FastifyInstance): Promise<void> {
     },
     timeWindow: '1 minute',
     keyGenerator: (req: FastifyRequest) => req.authUser?.id ?? req.ip,
-    allowList: (_req: FastifyRequest, key: string) => key === '/api/v1/health',
+    allowList: (req: FastifyRequest) => req.url.split('?')[0] === '/api/v1/health',
     errorResponseBuilder: (req, context) => ({
       statusCode: 429,
       error: 'Too Many Requests',

@@ -30,6 +30,15 @@ module.exports = {
     ],
     'import/no-duplicates': 'error',
     'import/no-cycle': 'warn',
+    // Disable import rules — TypeScript compiler handles module resolution
+    // eslint-import-resolver-typescript has issues with monorepo + node: protocol
+    'import/no-unresolved': 'off',
+    'import/namespace': 'off',
+    'import/default': 'off',
+    'import/no-named-as-default': 'off',
+    'import/no-named-as-default-member': 'off',
+    'import/no-duplicates': 'off',
+    'import/no-cycle': 'off',
     // General
     'no-console': ['warn', { allow: ['warn', 'error'] }],
     'prefer-const': 'error',
