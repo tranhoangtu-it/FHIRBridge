@@ -20,19 +20,11 @@ export { summarizeSections } from './section-summarizer.js';
 export { synthesize } from './synthesis-engine.js';
 
 // Prompt templates
-export {
-  getSectionPrompt,
-  getSynthesisPrompt,
-  isSupportedSection,
-} from './prompt-templates.js';
-export type {
-  PromptVariables,
-  PromptPair,
-  SectionName,
-} from './prompt-templates.js';
+export { getSectionPrompt, getSynthesisPrompt, isSupportedSection } from './prompt-templates.js';
+export type { PromptVariables, PromptPair, SectionName } from './prompt-templates.js';
 
 // Output formatters
-export { formatMarkdown, formatComposition } from './summary-formatter.js';
+export { formatMarkdown, formatComposition, formatPdf } from './summary-formatter.js';
 export type { FhirComposition } from './summary-formatter.js';
 
 // Token tracking

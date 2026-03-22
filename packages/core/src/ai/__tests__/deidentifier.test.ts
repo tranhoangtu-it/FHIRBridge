@@ -4,9 +4,10 @@
  * IMPORTANT: No PHI appears in test output — only hashes and structural assertions.
  */
 
+import type { Bundle, Resource } from '@fhirbridge/types';
 import { describe, it, expect } from 'vitest';
+
 import { deidentify, hashIdentifier, shiftDate, reidentifyDates } from '../deidentifier.js';
-import type { Bundle } from '@fhirbridge/types';
 
 const HMAC_SECRET = 'test-secret-do-not-use-in-prod';
 
@@ -58,7 +59,12 @@ function buildTestBundle(): Bundle {
           },
           onsetDateTime: '2020-03-01T10:00:00Z',
           clinicalStatus: {
-            coding: [{ system: 'http://terminology.hl7.org/CodeSystem/condition-clinical', code: 'active' }],
+            coding: [
+              {
+                system: 'http://terminology.hl7.org/CodeSystem/condition-clinical',
+                code: 'active',
+              },
+            ],
           },
         },
       },
@@ -69,11 +75,14 @@ function buildTestBundle(): Bundle {
           id: 'observation-001',
           status: 'final',
           code: {
-            coding: [
-              { system: 'http://loinc.org', code: '29463-7', display: 'Body Weight' },
-            ],
+            coding: [{ system: 'http://loinc.org', code: '29463-7', display: 'Body Weight' }],
           },
-          valueQuantity: { value: 85.2, unit: 'kg', system: 'http://unitsofmeasure.org', code: 'kg' },
+          valueQuantity: {
+            value: 85.2,
+            unit: 'kg',
+            system: 'http://unitsofmeasure.org',
+            code: 'kg',
+          },
           effectiveDateTime: '2023-06-15',
         },
       },
@@ -250,7 +259,7 @@ describe('deidentify', () => {
 
 describe('reidentifyDates', () => {
   it('reverses date shifts in text', () => {
-    const shiftMap = { 'abc123': 10 };
+    const shiftMap = { abc123: 10 };
     const text = 'Patient was seen on 2020-01-11. Follow-up on 2020-02-01.';
     const result = reidentifyDates(text, shiftMap);
     expect(result).toContain('2020-01-01');
@@ -260,5 +269,125 @@ describe('reidentifyDates', () => {
   it('handles empty shift map', () => {
     const text = 'Some text with 2020-01-01 in it.';
     expect(reidentifyDates(text, {})).toBe(text);
+  });
+
+  it('returns text unchanged when shiftMap has multiple entries', () => {
+    // Cannot safely reverse dates for multi-patient bundles
+    const shiftMap = { aaa: 5, bbb: 10 };
+    const text = 'Seen on 2020-01-06.';
+    expect(reidentifyDates(text, shiftMap)).toBe(text);
+  });
+});
+
+describe('deidentify — security-fix coverage', () => {
+  it('redacts text.div narrative to [NARRATIVE REDACTED]', () => {
+    // Use unknown cast because FHIR base Resource doesn't declare text/extension fields
+    const bundle: Bundle = {
+      resourceType: 'Bundle',
+      type: 'collection',
+      entry: [
+        {
+          resource: {
+            resourceType: 'Patient',
+            id: 'p1',
+            text: { status: 'generated', div: '<div>John Smith, DOB 1980-01-01</div>' },
+          } as unknown as Resource,
+        },
+      ],
+    };
+
+    const { bundle: deident } = deidentify(bundle, HMAC_SECRET);
+    const patient = deident.entry?.[0]?.resource as Record<string, unknown>;
+    const textField = patient?.['text'] as Record<string, unknown>;
+    expect(textField?.['div']).toContain('[NARRATIVE REDACTED]');
+    expect(JSON.stringify(deident)).not.toContain('John Smith');
+  });
+
+  it('strips extension arrays to empty', () => {
+    const bundle: Bundle = {
+      resourceType: 'Bundle',
+      type: 'collection',
+      entry: [
+        {
+          resource: {
+            resourceType: 'Patient',
+            id: 'p1',
+            extension: [
+              {
+                url: 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-race',
+                valueString: 'Asian',
+              },
+            ],
+          } as unknown as Resource,
+        },
+      ],
+    };
+
+    const { bundle: deident } = deidentify(bundle, HMAC_SECRET);
+    const patient = deident.entry?.[0]?.resource as Record<string, unknown>;
+    expect(patient?.['extension'] as unknown[]).toEqual([]);
+  });
+
+  it('strips modifierExtension to empty', () => {
+    const bundle: Bundle = {
+      resourceType: 'Bundle',
+      type: 'collection',
+      entry: [
+        {
+          resource: {
+            resourceType: 'Condition',
+            id: 'c1',
+            modifierExtension: [{ url: 'http://example.com/flag', valueBoolean: true }],
+          } as unknown as Resource,
+        },
+      ],
+    };
+
+    const { bundle: deident } = deidentify(bundle, HMAC_SECRET);
+    const condition = deident.entry?.[0]?.resource as Record<string, unknown>;
+    expect(condition?.['modifierExtension'] as unknown[]).toEqual([]);
+  });
+
+  it('strips note arrays to empty', () => {
+    const bundle: Bundle = {
+      resourceType: 'Bundle',
+      type: 'collection',
+      entry: [
+        {
+          resource: {
+            resourceType: 'Condition',
+            id: 'c1',
+            note: [{ text: 'Patient smokes 1 pack per day — personal detail' }],
+          } as unknown as Resource,
+        },
+      ],
+    };
+
+    const { bundle: deident } = deidentify(bundle, HMAC_SECRET);
+    const condition = deident.entry?.[0]?.resource as Record<string, unknown>;
+    expect(condition?.['note'] as unknown[]).toEqual([]);
+    expect(JSON.stringify(deident)).not.toContain('smokes');
+  });
+
+  it('redacts valueString to [CLINICAL_TEXT_REDACTED]', () => {
+    const bundle: Bundle = {
+      resourceType: 'Bundle',
+      type: 'collection',
+      entry: [
+        {
+          resource: {
+            resourceType: 'Observation',
+            id: 'obs1',
+            status: 'final',
+            valueString: 'Mild chest discomfort noted by provider',
+          } as unknown as Resource,
+        },
+      ],
+    };
+
+    const { bundle: deident } = deidentify(bundle, HMAC_SECRET);
+    const obs = deident.entry?.[0]?.resource as Record<string, unknown>;
+    expect(obs?.['valueString']).toBe('[CLINICAL_TEXT_REDACTED]');
+    expect(JSON.stringify(deident)).not.toContain('chest discomfort');
   });
 });
