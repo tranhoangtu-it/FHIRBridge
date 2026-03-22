@@ -1,9 +1,11 @@
 # CLAUDE.md — FHIRBridge
 
 ## Project Overview
+
 FHIRBridge is a FHIR R4 Patient Data Portability Tool. It exports patient medical data from HIS systems, transforms it into valid FHIR R4 bundles, and generates AI-powered summaries. Privacy-by-design: no patient data stored.
 
 ## Tech Stack
+
 - **Monorepo**: Turborepo + pnpm workspaces
 - **Language**: TypeScript (strict mode, ES2022)
 - **Backend**: Fastify REST API
@@ -15,6 +17,7 @@ FHIRBridge is a FHIR R4 Patient Data Portability Tool. It exports patient medica
 - **Cache**: Redis (rate limiting, job queues)
 
 ## Packages
+
 ```
 packages/
 ├── types/   # @fhirbridge/types — FHIR R4 types, AI types, connector types
@@ -25,6 +28,7 @@ packages/
 ```
 
 ## Commands
+
 ```bash
 pnpm install          # Install dependencies
 pnpm build            # Build all packages
@@ -41,6 +45,7 @@ pnpm --filter @fhirbridge/web dev
 ## Architecture Rules
 
 ### PRIVACY (NON-NEGOTIABLE)
+
 - **NEVER** store patient data (PHI) at rest — stream/transform only
 - **NEVER** log PHI in any log output, error messages, or audit records
 - **ALWAYS** de-identify data before sending to AI providers (HMAC-SHA256)
@@ -49,6 +54,7 @@ pnpm --filter @fhirbridge/web dev
 - API keys and secrets in env vars only, never in code
 
 ### Code Standards
+
 - Files under 200 LOC — modularize if larger
 - kebab-case file names
 - Barrel `index.ts` exports per module
@@ -57,21 +63,35 @@ pnpm --filter @fhirbridge/web dev
 - Adapter pattern for connectors (HisConnector) and AI providers (AiProvider)
 
 ### Security
+
 - SSRF protection: validate baseUrl, block private IPs
 - IDOR protection: userId ownership check on all resource access
 - Auth: JWT (HS256) + API key, skip only for /health
 - Rate limiting: tier-aware (free: 10/min, paid: 100/min)
 - Input validation via JSON Schema on all API routes
 
+## Billing
+
+- Free: 5 exports/month, no AI summary
+- Paid: $5/month → 100 exports/month + AI summaries
+- Providers: Stripe (international) + SePay/VietQR (Vietnam)
+- Quota enforcement: 402 Payment Required on exceeded limits
+- Webhook verification: Stripe signature + SePay HMAC-SHA256
+
 ## Key Files
+
 - `packages/core/src/ai/deidentifier.ts` — PHI de-identification (CRITICAL)
 - `packages/core/src/bundle/bundle-builder.ts` — FHIR Bundle assembly
 - `packages/core/src/connectors/` — HIS connector adapters
+- `packages/core/src/billing/` — Plan manager, usage tracker, payment providers
 - `packages/api/src/server.ts` — Fastify server setup
 - `packages/api/src/services/export-service.ts` — Export orchestration
+- `packages/api/src/services/redis-store.ts` — Redis with in-memory fallback
+- `packages/api/src/services/postgres-audit-sink.ts` — Batched audit logging
 - `plans/260322-autopilot-fhirbridge/plan.md` — Implementation plan
 
 ## Documentation
+
 - `docs/system-architecture.md` — Full system architecture
 - `docs/code-standards.md` — Coding standards
 - `docs/deployment-guide.md` — Setup & deployment

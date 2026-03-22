@@ -55,3 +55,9 @@ docker/volumes/
 
 # Claude sessions
 .claude/
+
+# Lock file debug
+pnpm-debug.yaml
+
+# Generated fixtures (recreated by scripts)
+tests/fixtures/excel/generate-fixture.cjs
