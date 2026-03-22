@@ -1,5 +1,7 @@
 /**
- * App — router setup with layout shell (sidebar + header + content).
+ * App — router setup.
+ * '/'       → public LandingPage (no sidebar)
+ * '/app/*'  → authenticated app shell with sidebar + header
  */
 
 import { Routes, Route, Navigate } from 'react-router-dom';
@@ -7,6 +9,7 @@ import { useState, useEffect } from 'react';
 import { AppSidebar } from './components/layout/app-sidebar';
 import { AppHeader } from './components/layout/app-header';
 import { ErrorBoundary } from './components/shared/error-boundary';
+import { LandingPage } from './pages/landing-page';
 import { DashboardPage } from './pages/dashboard-page';
 import { ExportWizardPage } from './pages/export-wizard-page';
 import { ImportPage } from './pages/import-page';
@@ -30,13 +33,16 @@ function useHealthCheck() {
     };
     void check();
     const interval = setInterval(() => void check(), 30_000);
-    return () => { cancelled = true; clearInterval(interval); };
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, []);
 
   return healthOk;
 }
 
-export default function App() {
+function AppShell() {
   const healthOk = useHealthCheck();
 
   return (
@@ -47,16 +53,26 @@ export default function App() {
         <main className="flex-1 overflow-y-auto" id="main-content" tabIndex={-1}>
           <ErrorBoundary>
             <Routes>
-              <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
-              <Route path={ROUTES.EXPORT} element={<ExportWizardPage />} />
-              <Route path={ROUTES.IMPORT} element={<ImportPage />} />
-              <Route path={ROUTES.SUMMARY} element={<SummaryViewerPage />} />
-              <Route path={ROUTES.SETTINGS} element={<SettingsPage />} />
+              <Route path="dashboard" element={<DashboardPage />} />
+              <Route path="export" element={<ExportWizardPage />} />
+              <Route path="import" element={<ImportPage />} />
+              <Route path="summary/:id" element={<SummaryViewerPage />} />
+              <Route path="settings" element={<SettingsPage />} />
               <Route path="*" element={<Navigate to={ROUTES.DASHBOARD} replace />} />
             </Routes>
           </ErrorBoundary>
         </main>
       </div>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path={ROUTES.LANDING} element={<LandingPage />} />
+      <Route path="/app/*" element={<AppShell />} />
+      <Route path="*" element={<Navigate to={ROUTES.LANDING} replace />} />
+    </Routes>
   );
 }
