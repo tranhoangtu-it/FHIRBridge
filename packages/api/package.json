@@ -1,0 +1,39 @@
+{
+  "name": "@fhirbridge/api",
+  "version": "0.1.0",
+  "description": "Fastify REST API server for FHIRBridge",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "dev": "node --watch dist/index.js",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "lint": "eslint src --ext .ts",
+    "test": "vitest run",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@fastify/cors": "^9.0.1",
+    "@fastify/jwt": "^8.0.1",
+    "@fastify/multipart": "^9.4.0",
+    "@fastify/rate-limit": "^9.1.0",
+    "@fhirbridge/core": "workspace:*",
+    "@fhirbridge/types": "workspace:*",
+    "fastify": "^4.28.1",
+    "fastify-plugin": "^5.1.0",
+    "pino": "^9.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.0",
+    "typescript": "*",
+    "vitest": "*"
+  }
+}

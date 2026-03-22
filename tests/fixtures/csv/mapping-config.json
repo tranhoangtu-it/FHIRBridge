@@ -1,0 +1,71 @@
+{
+  "description": "Sample mapping from patient CSV columns to FHIR Patient resource fields",
+  "mappings": [
+    {
+      "sourceColumn": "patient_id",
+      "fhirPath": "id",
+      "resourceType": "Patient",
+      "transform": "string"
+    },
+    {
+      "sourceColumn": "first_name",
+      "fhirPath": "name[0].given[0]",
+      "resourceType": "Patient",
+      "transform": "string"
+    },
+    {
+      "sourceColumn": "last_name",
+      "fhirPath": "name[0].family",
+      "resourceType": "Patient",
+      "transform": "string"
+    },
+    {
+      "sourceColumn": "birth_date",
+      "fhirPath": "birthDate",
+      "resourceType": "Patient",
+      "transform": "date"
+    },
+    {
+      "sourceColumn": "gender",
+      "fhirPath": "gender",
+      "resourceType": "Patient",
+      "transform": "code",
+      "valueMappings": [
+        { "sourceValue": "male", "system": "http://hl7.org/fhir/administrative-gender", "code": "male", "display": "Male" },
+        { "sourceValue": "female", "system": "http://hl7.org/fhir/administrative-gender", "code": "female", "display": "Female" },
+        { "sourceValue": "other", "system": "http://hl7.org/fhir/administrative-gender", "code": "other", "display": "Other" },
+        { "sourceValue": "unknown", "system": "http://hl7.org/fhir/administrative-gender", "code": "unknown", "display": "Unknown" }
+      ]
+    },
+    {
+      "sourceColumn": "phone",
+      "fhirPath": "telecom[0].value",
+      "resourceType": "Patient",
+      "transform": "string"
+    },
+    {
+      "sourceColumn": "address_line",
+      "fhirPath": "address[0].line[0]",
+      "resourceType": "Patient",
+      "transform": "string"
+    },
+    {
+      "sourceColumn": "city",
+      "fhirPath": "address[0].city",
+      "resourceType": "Patient",
+      "transform": "string"
+    },
+    {
+      "sourceColumn": "state",
+      "fhirPath": "address[0].state",
+      "resourceType": "Patient",
+      "transform": "string"
+    },
+    {
+      "sourceColumn": "postal_code",
+      "fhirPath": "address[0].postalCode",
+      "resourceType": "Patient",
+      "transform": "string"
+    }
+  ]
+}

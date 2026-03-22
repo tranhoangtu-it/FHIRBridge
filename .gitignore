@@ -1,0 +1,57 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# Environment variables — NEVER commit secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/settings.json
+*.swp
+*.swo
+
+# Turbo
+.turbo/
+
+# Temp
+tmp/
+temp/
+*.tmp
+
+# Synthea generated data (large files)
+tests/fixtures/synthea/*.json
+tests/fixtures/synthea/*.ndjson
+!tests/fixtures/synthea/.gitkeep
+
+# Docker volumes
+docker/volumes/
+
+# Claude sessions
+.claude/
