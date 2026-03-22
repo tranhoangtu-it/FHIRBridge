@@ -54,7 +54,7 @@ docker compose -f docker/docker-compose.yml up -d
 
 # 4. Build and verify
 pnpm build
-pnpm test        # 395 tests
+pnpm test        # 913 unit tests
 
 # 5. Start development
 pnpm dev
@@ -63,11 +63,19 @@ pnpm dev
 ## Development Commands
 
 ```bash
-pnpm build            # Build all packages
-pnpm dev              # Start all dev servers
-pnpm test             # Run 395 tests
-pnpm typecheck        # TypeScript strict check
-pnpm lint             # ESLint + Prettier
+pnpm build              # Build all packages
+pnpm dev                # Start all dev servers
+pnpm test               # Run 913 unit tests
+pnpm typecheck          # TypeScript strict check
+pnpm lint               # ESLint + Prettier
+
+# Test suites
+pnpm test:integration   # 54 API integration tests (server.inject)
+pnpm test:e2e:cli       # 24 CLI E2E tests (real subprocess)
+pnpm test:e2e           # Playwright E2E (3 browsers x 2 viewports, needs Docker)
+pnpm test:security      # 40 security tests (XSS, SSRF, auth bypass)
+pnpm test:perf          # 17 performance benchmarks
+pnpm test:all           # Everything sequential (fail-fast)
 
 # Per-package
 pnpm --filter @fhirbridge/api dev     # API server → http://localhost:3001
@@ -153,13 +161,19 @@ See `.env.example` for full documentation. Key variables:
 ## Testing
 
 ```bash
-pnpm test    # 395 tests across 33 files
+pnpm test               # 913 unit tests across 85 files
+pnpm test:integration   # 54 integration tests
+pnpm test:e2e:cli       # 24 CLI E2E tests
+pnpm test:e2e           # 53 Playwright specs (needs Docker + servers)
+pnpm test:security      # 40 security tests
+pnpm test:perf          # 17 performance benchmarks
+pnpm test:all           # All suites (fail-fast)
 
-# Breakdown:
-# @fhirbridge/core  — 247 tests (FHIR, validators, AI, billing, connectors)
-# @fhirbridge/api   —  57 tests (routes, plugins, services)
-# @fhirbridge/cli   —  16 tests (commands, config)
-# @fhirbridge/web   —  75 tests (hooks, components, pages)
+# Unit test breakdown:
+# @fhirbridge/core  — 411 tests (FHIR engine, AI, billing, connectors, validators)
+# @fhirbridge/web   — 203 tests (components, hooks, pages, API client)
+# @fhirbridge/api   — 161 tests (routes, plugins, services, schemas)
+# @fhirbridge/cli   — 138 tests (commands, config, formatters, utils)
 ```
 
 ## Documentation
