@@ -25,11 +25,17 @@ function requireTTY(): void {
 /**
  * Prompt for all missing export options interactively.
  * Only prompts for fields that are undefined.
+ * Only calls requireTTY when interactive input is actually needed.
  */
 export async function promptExportOptions(
   existing: Partial<ExportPromptResult>,
 ): Promise<ExportPromptResult> {
-  requireTTY();
+  const needsInteraction =
+    !existing.endpoint ||
+    !existing.patientId ||
+    !existing.format ||
+    existing.outputPath === undefined;
+  if (needsInteraction) requireTTY();
 
   const profiles = listProfiles();
   let endpoint = existing.endpoint;
@@ -60,23 +66,28 @@ export async function promptExportOptions(
     }
   }
 
-  const patientId = existing.patientId ?? (await input({
-    message: 'Patient ID:',
-    validate: (v) => (v.trim().length > 0 ? true : 'Patient ID is required'),
-  }));
+  const patientId =
+    existing.patientId ??
+    (await input({
+      message: 'Patient ID:',
+      validate: (v) => (v.trim().length > 0 ? true : 'Patient ID is required'),
+    }));
 
-  const format = (existing.format ?? (await select<'json' | 'ndjson'>({
-    message: 'Output format:',
-    choices: [
-      { name: 'JSON (pretty bundle)', value: 'json' },
-      { name: 'NDJSON (newline-delimited)', value: 'ndjson' },
-    ],
-  }))) as 'json' | 'ndjson';
+  const format = (existing.format ??
+    (await select<'json' | 'ndjson'>({
+      message: 'Output format:',
+      choices: [
+        { name: 'JSON (pretty bundle)', value: 'json' },
+        { name: 'NDJSON (newline-delimited)', value: 'ndjson' },
+      ],
+    }))) as 'json' | 'ndjson';
 
-  const outputPath = existing.outputPath ?? (await input({
-    message: 'Output file path (leave blank for stdout):',
-    default: '',
-  }));
+  const outputPath =
+    existing.outputPath ??
+    (await input({
+      message: 'Output file path (leave blank for stdout):',
+      default: '',
+    }));
 
   return { endpoint, patientId, format, outputPath };
 }

@@ -23,23 +23,30 @@ function requireTTY(): void {
 
 /**
  * Prompt for all missing import options interactively.
+ * Only calls requireTTY when interactive input is actually needed.
  */
 export async function promptImportOptions(
   existing: Partial<ImportPromptResult>,
 ): Promise<ImportPromptResult> {
-  requireTTY();
+  // Determine if we need any interactive prompts before calling requireTTY
+  const needsInteraction =
+    !existing.filePath || !existing.format || existing.outputPath === undefined;
+  if (needsInteraction) requireTTY();
 
-  const filePath = existing.filePath ?? (await input({
-    message: 'Path to CSV or Excel file:',
-    validate: (v) => {
-      if (!v.trim()) return 'File path is required';
-      if (!existsSync(v.trim())) return `File not found: ${v}`;
-      return true;
-    },
-  }));
+  const filePath =
+    existing.filePath ??
+    (await input({
+      message: 'Path to CSV or Excel file:',
+      validate: (v) => {
+        if (!v.trim()) return 'File path is required';
+        if (!existsSync(v.trim())) return `File not found: ${v}`;
+        return true;
+      },
+    }));
 
   let mappingPath = existing.mappingPath;
-  if (!mappingPath) {
+  // Only prompt for mapping when running interactively (TTY available)
+  if (!mappingPath && process.stdin.isTTY) {
     const hasMappingFile = await confirm({
       message: 'Do you have a column mapping file?',
       default: false,
@@ -57,18 +64,21 @@ export async function promptImportOptions(
     }
   }
 
-  const format = (existing.format ?? (await select<'json' | 'ndjson'>({
-    message: 'Output format:',
-    choices: [
-      { name: 'JSON (pretty bundle)', value: 'json' },
-      { name: 'NDJSON (newline-delimited)', value: 'ndjson' },
-    ],
-  }))) as 'json' | 'ndjson';
+  const format = (existing.format ??
+    (await select<'json' | 'ndjson'>({
+      message: 'Output format:',
+      choices: [
+        { name: 'JSON (pretty bundle)', value: 'json' },
+        { name: 'NDJSON (newline-delimited)', value: 'ndjson' },
+      ],
+    }))) as 'json' | 'ndjson';
 
-  const outputPath = existing.outputPath ?? (await input({
-    message: 'Output file path (leave blank for stdout):',
-    default: '',
-  }));
+  const outputPath =
+    existing.outputPath ??
+    (await input({
+      message: 'Output file path (leave blank for stdout):',
+      default: '',
+    }));
 
   return { filePath, mappingPath, outputPath, format };
 }

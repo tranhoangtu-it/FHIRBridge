@@ -4,7 +4,12 @@
 
 import { Command } from 'commander';
 import { readFileSync, existsSync } from 'fs';
-import { TransformPipeline, BundleBuilder, serializeToJson, serializeToNdjson } from '@fhirbridge/core';
+import {
+  TransformPipeline,
+  BundleBuilder,
+  serializeToJson,
+  serializeToNdjson,
+} from '@fhirbridge/core';
 import type { MappingConfig, RawRecord } from '@fhirbridge/core';
 import { promptImportOptions } from '../prompts/import-prompts.js';
 import { createProgress } from '../formatters/progress-display.js';
@@ -42,7 +47,8 @@ async function runImport(opts: ImportOptions): Promise<void> {
   const resolved = await promptImportOptions({
     filePath: opts.file,
     mappingPath: opts.mapping,
-    outputPath: opts.output,
+    // Pass empty string for outputPath (meaning stdout) to avoid requiring TTY when no --output flag
+    outputPath: opts.output ?? '',
     format: opts.format as 'json' | 'ndjson' | undefined,
   });
 
@@ -68,7 +74,9 @@ async function runImport(opts: ImportOptions): Promise<void> {
   let records: RawRecord[] = [];
   try {
     // Use unknown cast to avoid missing module type errors
-    const parserModule = await import('@fhirbridge/connectors' as string).catch(() => null) as Record<string, unknown> | null;
+    const parserModule = (await import('@fhirbridge/connectors' as string).catch(
+      () => null,
+    )) as Record<string, unknown> | null;
     if (parserModule && 'parseCsvFile' in parserModule) {
       const parseFn = parserModule['parseCsvFile'] as (path: string) => Promise<RawRecord[]>;
       records = await parseFn(resolved.filePath);
@@ -105,10 +113,7 @@ async function runImport(opts: ImportOptions): Promise<void> {
 
   const bundle = builder.build();
 
-  const output =
-    resolved.format === 'ndjson'
-      ? serializeToNdjson(bundle)
-      : serializeToJson(bundle);
+  const output = resolved.format === 'ndjson' ? serializeToNdjson(bundle) : serializeToJson(bundle);
 
   progress.stop();
 

@@ -21,39 +21,44 @@ function requireTTY(): void {
 
 /**
  * Prompt for AI provider configuration.
+ * Only calls requireTTY when interactive input is actually needed.
  */
 export async function promptProviderOptions(
   existing: Partial<ProviderPromptResult>,
 ): Promise<ProviderPromptResult> {
-  requireTTY();
+  const needsInteraction = !existing.provider || !existing.language || !existing.detail;
+  if (needsInteraction) requireTTY();
 
-  const provider = (existing.provider ?? (await select<'claude' | 'openai' | 'gemini'>({
-    message: 'Select AI provider:',
-    choices: [
-      { name: 'Claude (Anthropic)', value: 'claude' },
-      { name: 'GPT-4 (OpenAI)', value: 'openai' },
-      { name: 'Gemini (Google)', value: 'gemini' },
-    ],
-  }))) as 'claude' | 'openai' | 'gemini';
+  const provider = (existing.provider ??
+    (await select<'claude' | 'openai' | 'gemini'>({
+      message: 'Select AI provider:',
+      choices: [
+        { name: 'Claude (Anthropic)', value: 'claude' },
+        { name: 'GPT-4 (OpenAI)', value: 'openai' },
+        { name: 'Gemini (Google)', value: 'gemini' },
+      ],
+    }))) as 'claude' | 'openai' | 'gemini';
 
-  const language = (existing.language ?? (await select<'en' | 'vi' | 'ja' | 'zh'>({
-    message: 'Summary language:',
-    choices: [
-      { name: 'English', value: 'en' },
-      { name: 'Vietnamese', value: 'vi' },
-      { name: 'Japanese', value: 'ja' },
-      { name: 'Chinese (Simplified)', value: 'zh' },
-    ],
-  }))) as 'en' | 'vi' | 'ja' | 'zh';
+  const language = (existing.language ??
+    (await select<'en' | 'vi' | 'ja' | 'zh'>({
+      message: 'Summary language:',
+      choices: [
+        { name: 'English', value: 'en' },
+        { name: 'Vietnamese', value: 'vi' },
+        { name: 'Japanese', value: 'ja' },
+        { name: 'Chinese (Simplified)', value: 'zh' },
+      ],
+    }))) as 'en' | 'vi' | 'ja' | 'zh';
 
-  const detail = (existing.detail ?? (await select<'brief' | 'standard' | 'detailed'>({
-    message: 'Detail level:',
-    choices: [
-      { name: 'Brief (1-2 paragraphs)', value: 'brief' },
-      { name: 'Standard (structured sections)', value: 'standard' },
-      { name: 'Detailed (full clinical narrative)', value: 'detailed' },
-    ],
-  }))) as 'brief' | 'standard' | 'detailed';
+  const detail = (existing.detail ??
+    (await select<'brief' | 'standard' | 'detailed'>({
+      message: 'Detail level:',
+      choices: [
+        { name: 'Brief (1-2 paragraphs)', value: 'brief' },
+        { name: 'Standard (structured sections)', value: 'standard' },
+        { name: 'Detailed (full clinical narrative)', value: 'detailed' },
+      ],
+    }))) as 'brief' | 'standard' | 'detailed';
 
   return { provider, language, detail };
 }
