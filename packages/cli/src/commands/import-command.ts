@@ -2,7 +2,7 @@
  * Import command — convert CSV/Excel files to FHIR bundle using transform pipeline.
  */
 
-import { Command } from 'commander';
+import type { Command } from 'commander';
 import { readFileSync, existsSync } from 'fs';
 import {
   TransformPipeline,

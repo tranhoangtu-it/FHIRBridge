@@ -23,7 +23,7 @@ export function ImportPage() {
   const [mapping, setMapping] = useState<ColumnMapping>({});
   const [jobId, setJobId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { upload, uploading, progress } = useFileUpload();
+  const { uploading, progress } = useFileUpload();
 
   const handleFilesAccepted = useCallback(async (files: File[]) => {
     const file = files[0];
@@ -35,7 +35,9 @@ export function ImportPage() {
       setUploadedMeta(meta);
       if (meta.columns) {
         const initMapping: ColumnMapping = {};
-        meta.columns.forEach((c) => { initMapping[c] = ''; });
+        meta.columns.forEach((c) => {
+          initMapping[c] = '';
+        });
         setMapping(initMapping);
       }
     } catch (err) {
@@ -72,7 +74,10 @@ export function ImportPage() {
   const columns = uploadedMeta?.columns ?? [];
 
   return (
-    <PageContainer title="Import File" description="Upload CSV, XLSX or FHIR JSON and map to FHIR R4">
+    <PageContainer
+      title="Import File"
+      description="Upload CSV, XLSX or FHIR JSON and map to FHIR R4"
+    >
       <div className="mx-auto max-w-3xl space-y-6">
         {/* Stage 1 — Upload */}
         {stage === 'upload' && (
@@ -99,7 +104,9 @@ export function ImportPage() {
             {columns.length > 0 && (
               <>
                 <div>
-                  <h2 className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">Preview</h2>
+                  <h2 className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                    Preview
+                  </h2>
                   <PreviewTable columns={columns} rows={previewRows} />
                   {uploadedMeta && (
                     <p className="mt-1 text-xs text-gray-500">
@@ -108,12 +115,26 @@ export function ImportPage() {
                   )}
                 </div>
                 <div>
-                  <h2 className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">Map Columns to FHIR</h2>
+                  <h2 className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                    Map Columns to FHIR
+                  </h2>
                   <ColumnMapper sourceColumns={columns} mapping={mapping} onChange={setMapping} />
                 </div>
                 <div className="flex gap-2">
-                  <button type="button" onClick={handleReset} className="rounded-md border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 dark:border-gray-600">Cancel</button>
-                  <button type="button" onClick={() => void handleStartExport()} className="rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700">Start Import</button>
+                  <button
+                    type="button"
+                    onClick={handleReset}
+                    className="rounded-md border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 dark:border-gray-600"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleStartExport()}
+                    className="rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
+                  >
+                    Start Import
+                  </button>
                 </div>
               </>
             )}
@@ -130,8 +151,18 @@ export function ImportPage() {
         {stage === 'done' && (
           <div className="rounded-lg border border-green-200 bg-green-50 p-5 dark:border-green-800 dark:bg-green-900/20">
             <p className="font-medium text-green-800 dark:text-green-200">Import started</p>
-            {jobId && <p className="mt-1 text-sm text-green-600">Job ID: <StatusBadge status="running" /></p>}
-            <button type="button" onClick={handleReset} className="mt-3 rounded-md bg-green-700 px-3 py-1.5 text-sm text-white hover:bg-green-800">Import another file</button>
+            {jobId && (
+              <p className="mt-1 text-sm text-green-600">
+                Job ID: <StatusBadge status="running" />
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={handleReset}
+              className="mt-3 rounded-md bg-green-700 px-3 py-1.5 text-sm text-white hover:bg-green-800"
+            >
+              Import another file
+            </button>
           </div>
         )}
 
@@ -139,7 +170,13 @@ export function ImportPage() {
           <div className="rounded-lg border border-red-200 bg-red-50 p-5 dark:border-red-800 dark:bg-red-900/20">
             <p className="font-medium text-red-700 dark:text-red-300">Import failed</p>
             <p className="mt-1 text-sm text-red-600">{error}</p>
-            <button type="button" onClick={handleReset} className="mt-3 rounded-md border border-red-300 px-3 py-1.5 text-sm text-red-700 hover:bg-red-100">Try again</button>
+            <button
+              type="button"
+              onClick={handleReset}
+              className="mt-3 rounded-md border border-red-300 px-3 py-1.5 text-sm text-red-700 hover:bg-red-100"
+            >
+              Try again
+            </button>
           </div>
         )}
       </div>

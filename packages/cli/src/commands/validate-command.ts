@@ -3,7 +3,7 @@
  * Exit code 0 if valid, 1 if any errors found.
  */
 
-import { Command } from 'commander';
+import type { Command } from 'commander';
 import { readFileSync, existsSync } from 'fs';
 import { validateResource } from '@fhirbridge/core';
 import type { Bundle, Resource } from '@fhirbridge/core';
@@ -74,14 +74,22 @@ async function runValidate(inputPath: string, format: 'json' | 'table'): Promise
   }
 
   if (format === 'json') {
-    print(formatJson({ total: rows.length, valid: rows.filter((r) => r.status.includes('valid')).length, results: rows }));
+    print(
+      formatJson({
+        total: rows.length,
+        valid: rows.filter((r) => r.status.includes('valid')).length,
+        results: rows,
+      }),
+    );
   } else {
-    print(formatTable(rows as unknown as Record<string, unknown>[], [
-      { header: 'Resource Type', key: 'resourceType', width: 22 },
-      { header: 'ID', key: 'id', width: 30 },
-      { header: 'Status', key: 'status', width: 12 },
-      { header: 'Errors', key: 'errors', width: 50 },
-    ]));
+    print(
+      formatTable(rows as unknown as Record<string, unknown>[], [
+        { header: 'Resource Type', key: 'resourceType', width: 22 },
+        { header: 'ID', key: 'id', width: 30 },
+        { header: 'Status', key: 'status', width: 12 },
+        { header: 'Errors', key: 'errors', width: 50 },
+      ]),
+    );
   }
 
   const validCount = rows.filter((r) => !r.errors).length;

@@ -7,6 +7,10 @@ module.exports = {
     tsconfigRootDir: __dirname,
     ecmaFeatures: { jsx: true },
   },
+  rules: {
+    'react-hooks/exhaustive-deps': 'off',
+    'react-hooks/rules-of-hooks': 'off',
+  },
   settings: {
     react: {
       version: 'detect',

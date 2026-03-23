@@ -4,7 +4,8 @@
  */
 
 import { useState, useCallback } from 'react';
-import { exportApi, ExportJob, StartExportRequest } from '../api/export-api';
+import { exportApi } from '../api/export-api';
+import type { ExportJob, StartExportRequest } from '../api/export-api';
 
 export type ExportStep = 1 | 2 | 3 | 4 | 5 | 6;
 

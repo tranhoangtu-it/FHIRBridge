@@ -3,7 +3,13 @@
  */
 
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, ArrowUpFromLine, ArrowDownToLine, FileText, Settings, Activity } from 'lucide-react';
+import {
+  LayoutDashboard,
+  ArrowUpFromLine,
+  ArrowDownToLine,
+  Settings,
+  Activity,
+} from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { ROUTES } from '../../lib/constants';
 
@@ -57,11 +63,7 @@ export function AppSidebar({ healthOk }: Props) {
         <span
           className={cn(
             'inline-block h-2 w-2 rounded-full',
-            healthOk === undefined
-              ? 'bg-gray-400'
-              : healthOk
-                ? 'bg-green-500'
-                : 'bg-red-500',
+            healthOk === undefined ? 'bg-gray-400' : healthOk ? 'bg-green-500' : 'bg-red-500',
           )}
           aria-label={healthOk ? 'API online' : 'API offline'}
         />

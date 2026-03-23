@@ -3,7 +3,7 @@
  * Subcommands: set, get, list, add-profile, remove-profile
  */
 
-import { Command } from 'commander';
+import type { Command } from 'commander';
 import { input, select } from '@inquirer/prompts';
 import {
   loadConfig,
@@ -11,12 +11,7 @@ import {
   getConfigValue,
   CONFIG_PATH,
 } from '../config/config-manager.js';
-import {
-  setProfile,
-  removeProfile,
-  listProfiles,
-  getProfile,
-} from '../config/profile-store.js';
+import { setProfile, removeProfile, listProfiles, getProfile } from '../config/profile-store.js';
 import { formatKeyValue, formatTable } from '../formatters/table-formatter.js';
 import { formatJson } from '../formatters/json-formatter.js';
 import { info, success, error, warn, print } from '../utils/logger.js';
@@ -63,11 +58,13 @@ export function registerConfigCommand(program: Command): void {
       if (opts.format === 'json') {
         print(formatJson(cfg));
       } else {
-        print(formatKeyValue({
-          defaultProvider: cfg.defaultProvider,
-          defaultLanguage: cfg.defaultLanguage,
-          profiles: listProfiles().join(', ') || '(none)',
-        }));
+        print(
+          formatKeyValue({
+            defaultProvider: cfg.defaultProvider,
+            defaultLanguage: cfg.defaultLanguage,
+            profiles: listProfiles().join(', ') || '(none)',
+          }),
+        );
       }
     });
 
@@ -112,17 +109,21 @@ export function registerConfigCommand(program: Command): void {
         const p = getProfile(n) as ConnectorProfile;
         return { name: n, type: p.type, baseUrl: p.baseUrl ?? '' };
       });
-      print(formatTable(rows as Record<string, unknown>[], [
-        { header: 'Name', key: 'name', width: 20 },
-        { header: 'Type', key: 'type', width: 20 },
-        { header: 'Base URL', key: 'baseUrl', width: 50 },
-      ]));
+      print(
+        formatTable(rows as Record<string, unknown>[], [
+          { header: 'Name', key: 'name', width: 20 },
+          { header: 'Type', key: 'type', width: 20 },
+          { header: 'Base URL', key: 'baseUrl', width: 50 },
+        ]),
+      );
     });
 }
 
 async function addProfileInteractive(name: string): Promise<void> {
   if (!process.stdin.isTTY) {
-    throw new Error('Interactive profile creation requires a TTY. Use --help for non-interactive options.');
+    throw new Error(
+      'Interactive profile creation requires a TTY. Use --help for non-interactive options.',
+    );
   }
 
   const type = await select<ConnectorProfile['type']>({
