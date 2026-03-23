@@ -9,7 +9,7 @@
     "dev": "vite",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src --ext .ts,.tsx",
+    "lint": "eslint src/",
     "test": "vitest run",
     "clean": "rm -rf dist *.tsbuildinfo"
   },

@@ -73,7 +73,6 @@ export function usePolling<T>(
       if (timerRef.current) clearTimeout(timerRef.current);
       setPolling(false);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled]);
 
   return { data, error, polling, stop };

@@ -3,7 +3,7 @@
  * Connectors are optional dependencies; gracefully handles their absence.
  */
 
-import { Command } from 'commander';
+import type { Command } from 'commander';
 import { BundleBuilder, serializeToJson, serializeToNdjson } from '@fhirbridge/core';
 import type { Resource } from '@fhirbridge/core';
 import { promptExportOptions } from '../prompts/export-prompts.js';

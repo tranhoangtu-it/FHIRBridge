@@ -3,7 +3,7 @@
  * AI module is an optional dependency; gracefully handles absence.
  */
 
-import { Command } from 'commander';
+import type { Command } from 'commander';
 import { readFileSync, existsSync } from 'fs';
 import type { Bundle } from '@fhirbridge/core';
 import { promptProviderOptions } from '../prompts/provider-prompts.js';
@@ -52,7 +52,11 @@ async function runSummarize(opts: SummarizeOptions): Promise<void> {
   const config = loadConfig();
 
   const providerOpts = await promptProviderOptions({
-    provider: (opts.provider ?? config.defaultProvider) as 'claude' | 'openai' | 'gemini' | undefined,
+    provider: (opts.provider ?? config.defaultProvider) as
+      | 'claude'
+      | 'openai'
+      | 'gemini'
+      | undefined,
     language: (opts.language ?? config.defaultLanguage) as 'en' | 'vi' | 'ja' | 'zh' | undefined,
     detail: opts.detail as 'brief' | 'standard' | 'detailed' | undefined,
   });
@@ -65,12 +69,17 @@ async function runSummarize(opts: SummarizeOptions): Promise<void> {
     throw new Error(`Failed to parse FHIR bundle from: ${inputPath}`);
   }
 
-  info(`Summarizing with ${providerOpts.provider} (${providerOpts.language}, ${providerOpts.detail})...`);
+  info(
+    `Summarizing with ${providerOpts.provider} (${providerOpts.language}, ${providerOpts.detail})...`,
+  );
 
   let summary = '';
   try {
     // Dynamic import — ai package may not exist in all environments
-    const aiModule = await import('@fhirbridge/ai' as string).catch(() => null) as Record<string, unknown> | null;
+    const aiModule = (await import('@fhirbridge/ai' as string).catch(() => null)) as Record<
+      string,
+      unknown
+    > | null;
     if (aiModule && 'generateSummary' in aiModule) {
       const generateSummary = aiModule['generateSummary'] as (params: {
         bundle: Bundle;

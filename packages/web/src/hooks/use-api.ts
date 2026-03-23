@@ -15,9 +15,7 @@ export interface UseApiReturn<T, A extends unknown[]> extends UseApiState<T> {
   reset: () => void;
 }
 
-export function useApi<T, A extends unknown[]>(
-  fn: (...args: A) => Promise<T>,
-): UseApiReturn<T, A> {
+export function useApi<T, A extends unknown[]>(fn: (...args: A) => Promise<T>): UseApiReturn<T, A> {
   const [state, setState] = useState<UseApiState<T>>({
     data: null,
     loading: false,
@@ -37,7 +35,6 @@ export function useApi<T, A extends unknown[]>(
         return null;
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [fn],
   );
 

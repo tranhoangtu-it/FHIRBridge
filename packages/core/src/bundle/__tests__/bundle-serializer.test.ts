@@ -83,7 +83,9 @@ describe('serializeToNdjson', () => {
 
   it('each line is valid JSON', () => {
     const bundle = buildTestBundle();
-    const lines = serializeToNdjson(bundle).split('\n').filter((l) => l.trim());
+    const lines = serializeToNdjson(bundle)
+      .split('\n')
+      .filter((l) => l.trim());
     for (const line of lines) {
       expect(() => JSON.parse(line)).not.toThrow();
     }
@@ -91,7 +93,9 @@ describe('serializeToNdjson', () => {
 
   it('each line contains resourceType', () => {
     const bundle = buildTestBundle();
-    const lines = serializeToNdjson(bundle).split('\n').filter((l) => l.trim());
+    const lines = serializeToNdjson(bundle)
+      .split('\n')
+      .filter((l) => l.trim());
     for (const line of lines) {
       const resource = JSON.parse(line) as Record<string, unknown>;
       expect(resource['resourceType']).toBeTruthy();
@@ -107,7 +111,9 @@ describe('serializeToNdjson', () => {
         { fullUrl: 'urn:uuid:has-resource', resource: { resourceType: 'Patient', id: 'p1' } },
       ],
     };
-    const lines = serializeToNdjson(bundle).split('\n').filter((l) => l.trim());
+    const lines = serializeToNdjson(bundle)
+      .split('\n')
+      .filter((l) => l.trim());
     expect(lines).toHaveLength(1);
   });
 
@@ -147,6 +153,7 @@ describe('createReadableStream', () => {
   async function consumeStream(stream: ReadableStream<string>): Promise<string> {
     const reader = stream.getReader();
     let result = '';
+    // eslint-disable-next-line no-constant-condition
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
