@@ -25,7 +25,7 @@
     "csv-parse": "^6.2.1",
     "exceljs": "^4.4.0",
     "fhir-kit-client": "^1.9.2",
-    "openai": "^6.32.0",
+    "openai": "^6.33.0",
     "pdfkit": "^0.18.0",
     "stripe": "^20.4.1",
     "uuid": "^13.0.0"
