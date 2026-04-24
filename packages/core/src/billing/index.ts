@@ -7,12 +7,14 @@ export { PLANS, getPlan, canExport, canUseSummary, calculateOverageCost } from '
 
 // Usage tracking
 export {
+  InMemoryUsageTracker,
   recordExport,
   recordSummary,
   getUsage,
   resetPeriod,
   currentPeriod,
 } from './usage-tracker.js';
+export type { IUsageTracker } from './usage-tracker.js';
 
 // Provider interface
 export type { PaymentProviderAdapter, WebhookEvent } from './payment-provider-interface.js';

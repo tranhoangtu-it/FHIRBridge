@@ -83,9 +83,13 @@ export {
   resetPeriod,
   currentPeriod,
 } from './billing/index.js';
-export type { PaymentProviderAdapter, WebhookEvent } from './billing/index.js';
+export type { PaymentProviderAdapter, WebhookEvent, IUsageTracker } from './billing/index.js';
 export { StripeProvider } from './billing/index.js';
 export { SepayProvider } from './billing/index.js';
+
+// ── Security utilities ───────────────────────────────────────────────────────
+export { validateBaseUrl, validateBaseUrlWithDns } from './security/index.js';
+export type { ValidateBaseUrlResult } from './security/index.js';
 
 // ── Coding utilities ─────────────────────────────────────────────────────────
 export {
