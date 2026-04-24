@@ -8,10 +8,16 @@ import { randomUUID } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
 import { unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { extname, join } from 'node:path';
 import { pipeline as streamPipeline } from 'node:stream/promises';
 
-import { FhirEndpointConnector, BundleBuilder, CsvConnector } from '@fhirbridge/core';
+import {
+  FhirEndpointConnector,
+  BundleBuilder,
+  CsvConnector,
+  ExcelConnector,
+  validateBaseUrl,
+} from '@fhirbridge/core';
 import type { FhirEndpointConfig, Resource, ColumnMapping } from '@fhirbridge/types';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 
@@ -22,22 +28,22 @@ interface ConnectorTestBody {
   config: FhirEndpointConfig;
 }
 
-/** SSRF protection: block private/internal IPs */
-function validateBaseUrl(url: string): void {
-  const parsed = new URL(url);
-  const hostname = parsed.hostname.toLowerCase();
-  const blocked = [
-    'localhost',
-    '127.0.0.1',
-    '0.0.0.0',
-    '::1',
-    '169.254.169.254',
-    'metadata.google.internal',
-  ];
-  if (blocked.includes(hostname)) throw new Error('Internal endpoints are not allowed');
-  if (/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(hostname)) {
-    throw new Error('Private IP ranges are not allowed');
-  }
+/** MIME types Excel */
+const EXCEL_MIME_TYPES = new Set([
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+  'application/vnd.ms-excel', // .xls
+]);
+
+/**
+ * Phát hiện loại file từ MIME type và extension để dispatch đúng connector.
+ * Ưu tiên MIME type; fallback về extension nếu MIME là octet-stream hoặc không rõ.
+ */
+function detectFileType(filename: string, mimetype: string): 'excel' | 'csv' | null {
+  if (EXCEL_MIME_TYPES.has(mimetype)) return 'excel';
+  const ext = extname(filename).toLowerCase();
+  if (ext === '.xlsx' || ext === '.xls') return 'excel';
+  if (ext === '.csv' || mimetype === 'text/csv' || mimetype === 'text/plain') return 'csv';
+  return null;
 }
 
 export async function connectorRoutes(fastify: FastifyInstance): Promise<void> {
@@ -49,7 +55,19 @@ export async function connectorRoutes(fastify: FastifyInstance): Promise<void> {
       const { config } = request.body;
 
       try {
-        validateBaseUrl(config.baseUrl);
+        // Dùng centralised SSRF validator từ @fhirbridge/core
+        const ssrfCheck = validateBaseUrl(config.baseUrl);
+        if (!ssrfCheck.ok) {
+          // Normalize error messages để backward-compatible với API contract đã có
+          const reason = ssrfCheck.reason;
+          const normalized =
+            reason.includes('private/loopback') || reason.includes('Private IP')
+              ? 'Private IP ranges are not allowed'
+              : reason.includes('is blocked') || reason.includes('blocked')
+                ? 'Internal endpoints are not allowed'
+                : reason;
+          throw new Error(normalized);
+        }
         const connector = new FhirEndpointConnector();
         const connectorCfg = { ...config, type: 'fhir-endpoint' as const };
         await connector.connect(connectorCfg);
@@ -78,13 +96,19 @@ export async function connectorRoutes(fastify: FastifyInstance): Promise<void> {
         });
       }
 
-      const tempFile = join(tmpdir(), `fhirbridge-import-${randomUUID()}.csv`);
+      // Tạo temp file với extension tạm — sẽ rename sau khi biết loại file
+      const tempId = randomUUID();
+      const tempFile = join(tmpdir(), `fhirbridge-import-${tempId}.tmp`);
       try {
         const parts = request.parts();
         let mappingConfig: Record<string, unknown> | undefined;
+        let uploadedFilename = '';
+        let uploadedMimetype = '';
 
         for await (const part of parts) {
           if (part.type === 'file') {
+            uploadedFilename = part.filename ?? '';
+            uploadedMimetype = part.mimetype ?? '';
             // Stream file to temp location
             const writeStream = createWriteStream(tempFile);
             await streamPipeline(part.file, writeStream);
@@ -93,21 +117,47 @@ export async function connectorRoutes(fastify: FastifyInstance): Promise<void> {
           }
         }
 
-        // Process CSV through pipeline
-        const connector = new CsvConnector();
-        await connector.connect({
-          type: 'csv',
-          filePath: tempFile,
-          mapping: ((mappingConfig as Record<string, unknown>)?.columns ?? []) as ColumnMapping[],
-        });
+        // Phát hiện loại file từ MIME + extension
+        const fileType = detectFileType(uploadedFilename, uploadedMimetype);
+        if (!fileType) {
+          return reply.status(400).send({
+            statusCode: 400,
+            error: 'Bad Request',
+            message: `Unsupported file type '${uploadedMimetype}' (filename: '${uploadedFilename}'). Use .csv, .xlsx, or .xls`,
+          });
+        }
 
+        const columnMapping = (mappingConfig?.['columns'] as ColumnMapping[] | undefined) ?? [];
+
+        // Dispatch đúng connector theo loại file (C-13)
         const builder = new BundleBuilder();
         let resourceCount = 0;
-        for await (const record of connector.fetchPatientData('*')) {
-          if (++resourceCount > 10_000) break; // Safety limit
-          builder.addResource(record.data as unknown as Resource);
+
+        if (fileType === 'excel') {
+          const connector = new ExcelConnector();
+          await connector.connect({
+            type: 'excel',
+            filePath: tempFile,
+            mapping: columnMapping,
+          });
+          for await (const record of connector.fetchPatientData('*')) {
+            if (++resourceCount > 10_000) break; // Safety limit
+            builder.addResource(record.data as unknown as Resource);
+          }
+          await connector.disconnect();
+        } else {
+          const connector = new CsvConnector();
+          await connector.connect({
+            type: 'csv',
+            filePath: tempFile,
+            mapping: columnMapping,
+          });
+          for await (const record of connector.fetchPatientData('*')) {
+            if (++resourceCount > 10_000) break; // Safety limit
+            builder.addResource(record.data as unknown as Resource);
+          }
+          await connector.disconnect();
         }
-        await connector.disconnect();
 
         const bundle = builder.build();
         return reply.status(200).send({

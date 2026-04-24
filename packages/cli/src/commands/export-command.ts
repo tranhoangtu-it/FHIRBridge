@@ -1,10 +1,14 @@
 /**
  * Export command — fetch patient data from a FHIR endpoint and produce a bundle.
- * Connectors are optional dependencies; gracefully handles their absence.
  */
 
 import type { Command } from 'commander';
-import { BundleBuilder, serializeToJson, serializeToNdjson } from '@fhirbridge/core';
+import {
+  BundleBuilder,
+  serializeToJson,
+  serializeToNdjson,
+  FhirEndpointConnector,
+} from '@fhirbridge/core';
 import type { Resource } from '@fhirbridge/core';
 import { promptExportOptions } from '../prompts/export-prompts.js';
 import { createProgress } from '../formatters/progress-display.js';
@@ -64,28 +68,22 @@ async function runExport(opts: ExportOptions): Promise<void> {
   debug(`Patient ID: ${resolved.patientId} | Format: ${resolved.format}`);
 
   const progress = createProgress(5, 'Exporting');
-  let resources: Resource[] = [];
+  const resources: Resource[] = [];
 
   try {
     progress.update(1);
     info('Fetching patient data...');
 
-    // Dynamic import — connector package may not exist in all environments
-    // Use unknown cast to avoid missing module type errors
-    const connectorModule = (await import('@fhirbridge/connectors' as string).catch(
-      () => null,
-    )) as Record<string, unknown> | null;
-    if (connectorModule && 'FhirEndpointConnector' in connectorModule) {
-      const ConnectorClass = connectorModule['FhirEndpointConnector'] as new (cfg: {
-        baseUrl: string;
-      }) => {
-        fetchPatientBundle(id: string): Promise<Resource[]>;
-      };
-      const connector = new ConnectorClass({ baseUrl: resolved.endpoint });
-      resources = await connector.fetchPatientBundle(resolved.patientId);
-    } else {
-      info('Connector module not available. Building empty bundle.');
+    // Sử dụng FhirEndpointConnector từ @fhirbridge/core (static import, không dynamic)
+    const connector = new FhirEndpointConnector();
+    await connector.connect({ type: 'fhir-endpoint', baseUrl: resolved.endpoint });
+
+    // fetchPatientData trả về AsyncIterable<RawRecord> — collect thành Resource[]
+    for await (const record of connector.fetchPatientData(resolved.patientId)) {
+      resources.push(record.data as unknown as Resource);
     }
+    await connector.disconnect();
+
     progress.update(2);
   } catch (fetchErr) {
     error(`Fetch failed: ${(fetchErr as Error).message}`);

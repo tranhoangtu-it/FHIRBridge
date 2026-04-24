@@ -8,6 +8,32 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { buildProgram } from '../../index.js';
 
+// Mock @fhirbridge/core connectors để tránh real filesystem/network calls trong unit tests
+vi.mock('@fhirbridge/core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@fhirbridge/core')>();
+  return {
+    ...actual,
+    // CsvConnector stub — trả về empty async iterable
+    CsvConnector: vi.fn().mockImplementation(() => ({
+      connect: vi.fn().mockResolvedValue(undefined),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      fetchPatientData: vi.fn().mockReturnValue((async function* () {})()),
+      testConnection: vi
+        .fn()
+        .mockResolvedValue({ connected: true, checkedAt: new Date().toISOString() }),
+    })),
+    // ExcelConnector stub — trả về empty async iterable
+    ExcelConnector: vi.fn().mockImplementation(() => ({
+      connect: vi.fn().mockResolvedValue(undefined),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      fetchPatientData: vi.fn().mockReturnValue((async function* () {})()),
+      testConnection: vi
+        .fn()
+        .mockResolvedValue({ connected: true, checkedAt: new Date().toISOString() }),
+    })),
+  };
+});
+
 // Silence logger output in tests
 vi.mock('../../utils/logger.js', () => ({
   info: vi.fn(),

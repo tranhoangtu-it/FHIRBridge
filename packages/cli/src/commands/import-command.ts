@@ -1,16 +1,19 @@
 /**
- * Import command — convert CSV/Excel files to FHIR bundle using transform pipeline.
+ * Import command — convert CSV/Excel files to FHIR bundle using connectors + transform pipeline.
  */
 
 import type { Command } from 'commander';
 import { readFileSync, existsSync } from 'fs';
+import { extname } from 'path';
 import {
   TransformPipeline,
   BundleBuilder,
   serializeToJson,
   serializeToNdjson,
+  CsvConnector,
+  ExcelConnector,
 } from '@fhirbridge/core';
-import type { MappingConfig, RawRecord } from '@fhirbridge/core';
+import type { MappingConfig, RawRecord, ConnectorRawRecord } from '@fhirbridge/core';
 import { promptImportOptions } from '../prompts/import-prompts.js';
 import { createProgress } from '../formatters/progress-display.js';
 import { writeOutput } from '../utils/file-writer.js';
@@ -70,35 +73,67 @@ async function runImport(opts: ImportOptions): Promise<void> {
   const resourceType = opts.resourceType ?? 'Patient';
   info(`Reading file: ${resolved.filePath}`);
 
-  // Parse CSV/Excel — attempt connector/parser module
-  let records: RawRecord[] = [];
+  // Phát hiện loại file theo extension để chọn đúng connector
+  const ext = extname(resolved.filePath).toLowerCase();
+  const isExcel = ext === '.xlsx' || ext === '.xls';
+
+  // Parse CSV hoặc Excel bằng connector tương ứng từ @fhirbridge/core
+  // ConnectorRawRecord (interface với known fields) ≠ pipeline.RawRecord (Record<string,unknown>)
+  // Dùng ConnectorRawRecord[] để lưu kết quả connector, cast khi feed vào pipeline
+  const connectorRecords: ConnectorRawRecord[] = [];
   try {
-    // Use unknown cast to avoid missing module type errors
-    const parserModule = (await import('@fhirbridge/connectors' as string).catch(
-      () => null,
-    )) as Record<string, unknown> | null;
-    if (parserModule && 'parseCsvFile' in parserModule) {
-      const parseFn = parserModule['parseCsvFile'] as (path: string) => Promise<RawRecord[]>;
-      records = await parseFn(resolved.filePath);
+    // MappingConfig (Record<string,string>) → ColumnMapping[] cho connector
+    // Mỗi key là sourceColumn, value là fhirPath
+    const columnMapping = mappingConfig
+      ? Object.entries(mappingConfig).map(([sourceColumn, fhirPath]) => ({
+          sourceColumn,
+          fhirPath,
+          resourceType,
+        }))
+      : [];
+
+    if (isExcel) {
+      // Sử dụng ExcelConnector cho .xlsx/.xls
+      const connector = new ExcelConnector();
+      await connector.connect({
+        type: 'excel',
+        filePath: resolved.filePath,
+        mapping: columnMapping,
+      });
+      for await (const record of connector.fetchPatientData('*')) {
+        connectorRecords.push(record);
+      }
+      await connector.disconnect();
     } else {
-      info('Parser module not available. Using empty record set for demonstration.');
+      // Mặc định dùng CsvConnector cho .csv và các file text khác
+      const connector = new CsvConnector();
+      await connector.connect({
+        type: 'csv',
+        filePath: resolved.filePath,
+        mapping: columnMapping,
+      });
+      for await (const record of connector.fetchPatientData('*')) {
+        connectorRecords.push(record);
+      }
+      await connector.disconnect();
     }
   } catch (parseErr) {
     error(`Parse failed: ${(parseErr as Error).message}`);
     throw parseErr;
   }
 
-  info(`Loaded ${records.length} records`);
+  info(`Loaded ${connectorRecords.length} records`);
 
-  const progress = createProgress(Math.max(records.length + 2, 3), 'Transforming');
+  const progress = createProgress(Math.max(connectorRecords.length + 2, 3), 'Transforming');
 
   // Run transform pipeline — collect into single bundle
   const pipeline = new TransformPipeline({ resourceType, mappingConfig, skipOnError: true });
   const builder = new BundleBuilder();
   let processed = 0;
 
+  // Cast ConnectorRawRecord → pipeline.RawRecord (Record<string,unknown>) — structurally compatible
   async function* recordIterator(): AsyncIterable<RawRecord> {
-    for (const r of records) yield r;
+    for (const r of connectorRecords) yield r as unknown as RawRecord;
   }
 
   for await (const batchBundle of pipeline.pipe(recordIterator())) {
@@ -120,7 +155,7 @@ async function runImport(opts: ImportOptions): Promise<void> {
   writeOutput(output, resolved.outputPath || undefined);
 
   success(
-    `Imported ${processed} resources from ${records.length} records` +
+    `Imported ${processed} resources from ${connectorRecords.length} records` +
       (resolved.outputPath ? ` → ${resolved.outputPath}` : ' → stdout'),
   );
 }

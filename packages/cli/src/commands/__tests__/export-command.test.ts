@@ -5,6 +5,26 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { buildProgram } from '../../index.js';
 
+// Mock @fhirbridge/core connectors để tránh real network calls trong unit tests
+vi.mock('@fhirbridge/core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@fhirbridge/core')>();
+  return {
+    ...actual,
+    // FhirEndpointConnector stub — trả về empty async iterable
+    FhirEndpointConnector: vi.fn().mockImplementation(() => ({
+      connect: vi.fn().mockResolvedValue(undefined),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      fetchPatientData: vi.fn().mockReturnValue(
+        // async generator rỗng
+        (async function* () {})(),
+      ),
+      testConnection: vi
+        .fn()
+        .mockResolvedValue({ connected: true, checkedAt: new Date().toISOString() }),
+    })),
+  };
+});
+
 // Silence logger output in tests
 vi.mock('../../utils/logger.js', () => ({
   info: vi.fn(),
