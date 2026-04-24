@@ -19,12 +19,16 @@ export interface SummaryRequest {
   bundle: Bundle;
   summaryConfig?: SummaryRequestOptions;
   hmacSecret: string;
+  /** ID của user khởi tạo — lưu vào record để enforce ownership */
+  userId: string;
 }
 
 export type SummaryStatus = 'processing' | 'complete' | 'failed';
 
 export interface SummaryRecord {
   status: SummaryStatus;
+  /** ID của user tạo summary — dùng cho IDOR ownership check */
+  userId: string;
   summary?: PatientSummary;
   formattedMarkdown?: string;
   error?: string;
@@ -101,17 +105,29 @@ export class SummaryService {
   /** Start async summary generation. Returns summaryId immediately. */
   async startGeneration(request: SummaryRequest): Promise<string> {
     const summaryId = randomUUID();
-    await this.storeRecord(summaryId, { status: 'processing', createdAt: Date.now() });
+    await this.storeRecord(summaryId, {
+      status: 'processing',
+      userId: request.userId,
+      createdAt: Date.now(),
+    });
     this.runGeneration(summaryId, request).catch(() => {
-      /* stored in record */
+      /* lỗi đã được lưu vào record.status = 'failed' */
     });
     return summaryId;
   }
 
-  /** Get current status of a summary job */
-  async getStatus(summaryId: string): Promise<SummaryRecord | undefined> {
+  /**
+   * Lấy trạng thái summary job.
+   * Nếu truyền userId, kiểm tra ownership — trả undefined nếu không khớp (treat as 404).
+   * Caller dùng undefined để trả 404 (không lộ 403 timing).
+   */
+  async getStatus(summaryId: string, userId?: string): Promise<SummaryRecord | undefined> {
     this.evictExpiredMemory();
-    return this.loadRecord(summaryId);
+    const record = await this.loadRecord(summaryId);
+    if (!record) return undefined;
+    // IDOR protection: khi có userId, chỉ trả record nếu owner khớp
+    if (userId !== undefined && record.userId !== userId) return undefined;
+    return record;
   }
 
   /** Internal: run the full AI pipeline */

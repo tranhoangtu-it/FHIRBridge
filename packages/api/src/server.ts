@@ -14,6 +14,8 @@ import { authPlugin } from './plugins/auth-plugin.js';
 import { corsPlugin } from './plugins/cors-plugin.js';
 import { rateLimiterPlugin } from './plugins/rate-limiter-plugin.js';
 import { requestIdPlugin } from './plugins/request-id-plugin.js';
+import { securityHeadersPlugin } from './plugins/security-headers-plugin.js';
+import { swaggerPlugin } from './plugins/swagger-plugin.js';
 import { billingRoutes } from './routes/billing-routes.js';
 import { connectorRoutes } from './routes/connector-routes.js';
 import { exportRoutes } from './routes/export-routes.js';
@@ -27,7 +29,12 @@ const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 /**
  * Create and configure Fastify instance.
- * Plugin registration order: requestId → cors → auth → rateLimiter → audit → routes
+ * Plugin registration order:
+ *   swagger → securityHeaders → requestId → cors → multipart
+ *   → auth → rateLimiter → audit → routes
+ *
+ * swagger phải đứng trước routes để collect schemas.
+ * securityHeaders đứng sớm để cover toàn bộ responses.
  */
 export async function createServer(config: ApiConfig): Promise<FastifyInstance> {
   const fastify = Fastify({
@@ -51,6 +58,12 @@ export async function createServer(config: ApiConfig): Promise<FastifyInstance> 
   }
 
   const auditService = new AuditService(auditSink);
+
+  // 0a. Swagger/OpenAPI — trước routes để collect schemas (chỉ bật ngoài prod hoặc khi ENABLE_DOCS=true)
+  await fastify.register(swaggerPlugin);
+
+  // 0b. Security headers (helmet) — áp dụng sớm cho mọi response
+  await fastify.register(securityHeadersPlugin);
 
   // 1. Request ID — must be first so subsequent plugins/hooks have it
   await fastify.register(requestIdPlugin);

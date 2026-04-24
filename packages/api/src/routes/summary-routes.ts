@@ -5,6 +5,9 @@
  *
  * Quota enforcement: AI summaries are only available on paid tier.
  * Returns 402 Payment Required if user is on free tier.
+ *
+ * Bảo mật C-2 (IDOR): tất cả route đều pass userId để enforce ownership.
+ * getStatus() trả undefined khi userId không khớp → route trả 404.
  */
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
@@ -67,6 +70,7 @@ export async function summaryRoutes(
         bundle,
         summaryConfig: summaryConfig as SummaryRequestOptions | undefined,
         hmacSecret: opts.config.hmacSecret,
+        userId,
       });
 
       // Record usage after successful summary initiation
@@ -84,7 +88,9 @@ export async function summaryRoutes(
       request: FastifyRequest<{ Params: IdParams; Querystring: DownloadQuery }>,
       reply: FastifyReply,
     ) => {
-      const record = await summaryService.getStatus(request.params.id);
+      // IDOR protection: pass userId agar getStatus() enforce ownership
+      const callerUserId = request.authUser?.id ?? 'anonymous';
+      const record = await summaryService.getStatus(request.params.id, callerUserId);
       if (!record) {
         return reply
           .status(404)
