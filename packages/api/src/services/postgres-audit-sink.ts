@@ -79,25 +79,22 @@ export class PostgresAuditSink implements AuditSink {
 
     try {
       this.healthy = true;
-      // Build a multi-row INSERT
       const values: unknown[] = [];
       const placeholders = batch.map((entry, i) => {
-        const base = i * 5;
+        const base = i * 6;
         values.push(
           entry.timestamp,
           entry.userIdHash,
           entry.action,
           entry.status,
           entry.resourceCount ?? null,
-          // metadata excluded from placeholder count — added separately
+          entry.metadata ? JSON.stringify(entry.metadata) : null,
         );
-        // 5 columns: timestamp, user_id_hash, action, status, resource_count
-        // metadata is JSONB — cast explicitly
-        return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5})`;
+        return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}::jsonb)`;
       });
 
       await client.query(
-        `INSERT INTO audit_logs (timestamp, user_id_hash, action, status, resource_count)
+        `INSERT INTO audit_logs (timestamp, user_id_hash, action, status, resource_count, metadata)
          VALUES ${placeholders.join(', ')}`,
         values,
       );

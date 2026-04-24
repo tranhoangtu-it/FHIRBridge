@@ -5,8 +5,10 @@
  * Strategy:
  * - Hash all identifiers with HMAC-SHA256 (truncated to 16 hex chars)
  * - Replace patient names with [PATIENT], practitioner names with [PROVIDER]
- * - Shift all dates by a random offset (±30 days), consistent per patient
+ * - Shift all dates by a random offset (±29 days, never 0), consistent per patient
  * - Strip address line/postalCode, phone, email, SSN
+ * - Redact Organization.name + Location.name → HMAC hash
+ * - Truncate age ≥ 89 to year-only bucket per HIPAA Safe Harbor
  * - PRESERVE: medical codes (LOINC, SNOMED, RxNorm), observation values, dosages
  */
 
@@ -14,8 +16,25 @@ import { createHmac } from 'node:crypto';
 
 import type { Bundle, BundleEntry, DateShiftMap, DeidentifiedBundle } from '@fhirbridge/types';
 
-/** Maximum date shift in days (±30) */
-const MAX_DATE_SHIFT_DAYS = 30;
+/**
+ * Maximum date shift in days (±29).
+ * Dùng 29 thay vì 30 để công thức zero-avoidance hoạt động đúng:
+ * range là -29..+29 (59 giá trị), shift = (hash % 59) - 29;
+ * nếu shift === 0 thì fallback về +30 (nằm ngoài range bình thường).
+ */
+const MAX_DATE_SHIFT_DAYS = 29;
+
+/**
+ * Ngưỡng tuổi HIPAA Safe Harbor — bệnh nhân ≥ 89 tuổi phải được ẩn birthDate
+ * chính xác, chỉ giữ lại year-bucket.
+ */
+const HIPAA_AGE_THRESHOLD = 89;
+
+/**
+ * Year-bucket cho bệnh nhân ≥ 89 tuổi (năm sinh giả, không thể suy ra tuổi chính xác).
+ * Dùng "1900" như một placeholder an toàn theo HIPAA Safe Harbor.
+ */
+const AGE_BUCKET_YEAR = '1900';
 
 /** Milliseconds per day */
 const MS_PER_DAY = 86_400_000;
@@ -38,13 +57,21 @@ export function hashIdentifier(value: string, secret: string): string {
 
 /**
  * Generate a deterministic date shift offset in days for a given patient hash.
- * Range: ±30 days. Uses HMAC bytes for determinism.
+ * Range: ±29 days, KHÔNG BAO GIỜ bằng 0 (C-9 zero-shift fix).
+ *
+ * Thuật toán:
+ *   raw = hmacByte[0] % 59  → [0..58]
+ *   shift = raw - 29        → [-29..+29]
+ *   if shift === 0 → shift = +30  (fallback ngoài range bình thường, vẫn an toàn)
  */
 function getDateShift(patientIdHash: string, secret: string): number {
   const hmacBytes = createHmac('sha256', secret).update(patientIdHash).digest();
-  // Use first 2 bytes to get a value 0–65535, map to -30..+30
-  const raw = (hmacBytes[0]! << 8) | hmacBytes[1]!;
-  return Math.round((raw / 65535) * (MAX_DATE_SHIFT_DAYS * 2)) - MAX_DATE_SHIFT_DAYS;
+  // Dùng byte đầu tiên, modulo 59 để có range đều [-29..+29]
+  const raw = hmacBytes[0]! % 59;
+  let shift = raw - MAX_DATE_SHIFT_DAYS; // [-29..+29]
+  // INV-2: shift không được bằng 0 — tránh leak "ngày không thay đổi = ngày thật"
+  if (shift === 0) shift = MAX_DATE_SHIFT_DAYS + 1; // +30
+  return shift;
 }
 
 /**
@@ -69,15 +96,28 @@ export function shiftDate(dateStr: string, offsetDays: number): string {
 }
 
 /**
- * Deep-clone and de-identify a FHIR resource object.
+ * Deep-clone và de-identify một FHIR resource object.
  * Traverses all fields, applying transformations based on field names.
+ *
+ * @param resource - Object cần xử lý
+ * @param secret - HMAC secret
+ * @param offsetDays - Số ngày shift date
+ * @param resourceType - resourceType của top-level resource (để xử lý Organization/Location)
+ * @param patientBirthDate - birthDate gốc của Patient (để check age ≥ 89)
  */
 function deidentifyResource(
   resource: Record<string, unknown>,
   secret: string,
   offsetDays: number,
+  resourceType?: string,
+  patientBirthDate?: string,
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
+
+  // Xác định resourceType từ resource nếu chưa có (top-level call)
+  const effectiveResourceType =
+    resourceType ??
+    (typeof resource['resourceType'] === 'string' ? resource['resourceType'] : undefined);
 
   for (const [key, value] of Object.entries(resource)) {
     // Skip null/undefined
@@ -128,6 +168,16 @@ function deidentifyResource(
       continue;
     }
 
+    // Organization.name + Location.name → HMAC hash (C-10: redact org/loc names)
+    if (
+      key === 'name' &&
+      typeof value === 'string' &&
+      (effectiveResourceType === 'Organization' || effectiveResourceType === 'Location')
+    ) {
+      result[key] = hashIdentifier(value, secret);
+      continue;
+    }
+
     // Strip patient/practitioner names
     if (key === 'name' && Array.isArray(value)) {
       // Check context: if this is inside a Patient or Practitioner, replace names
@@ -151,16 +201,36 @@ function deidentifyResource(
       continue;
     }
 
-    // Shift date fields
+    // Xử lý birthDate riêng — kiểm tra age ≥ 89 per HIPAA Safe Harbor (C-10)
+    if (key === 'birthDate' && typeof value === 'string') {
+      const birthDateStr = value;
+      const birthYear = new Date(birthDateStr).getFullYear();
+      const currentYear = new Date().getFullYear();
+      // Tính tuổi theo năm (conservative: dùng năm hiện tại - năm sinh)
+      const ageApprox = currentYear - birthYear;
+      if (ageApprox >= HIPAA_AGE_THRESHOLD) {
+        // HIPAA Safe Harbor: không tiết lộ năm sinh chính xác cho bệnh nhân ≥ 89 tuổi
+        result[key] = AGE_BUCKET_YEAR;
+      } else {
+        result[key] = shiftDate(birthDateStr, offsetDays);
+      }
+      continue;
+    }
+
+    // Shift date fields — allowlist mở rộng per C-10
     if (
       (key.endsWith('Date') ||
         key.endsWith('DateTime') ||
         key.endsWith('Time') ||
-        key === 'birthDate' ||
         key === 'deceasedDateTime' ||
         key === 'issued' ||
         key === 'effectiveDateTime' ||
+        key === 'effectiveInstant' ||
         key === 'performedDateTime' ||
+        key === 'authoredOn' ||
+        key === 'recordedDate' ||
+        key === 'onsetDateTime' ||
+        key === 'lastUpdated' ||
         key === 'start' ||
         key === 'end' ||
         key === 'timestamp') &&
@@ -187,6 +257,23 @@ function deidentifyResource(
       continue;
     }
 
+    // Redact free-text fields có thể chứa PHI — C-10 expansion
+    // Bao gồm code.text, valueCodeableConcept.text, dosageInstruction.text/.patientInstruction
+    if (
+      key === 'text' &&
+      typeof value === 'string' &&
+      // Chỉ redact text dạng string (plain text), không phải text narrative object (đã xử lý ở trên)
+      true
+    ) {
+      result[key] = '[CLINICAL_TEXT_REDACTED]';
+      continue;
+    }
+
+    if (key === 'patientInstruction' && typeof value === 'string') {
+      result[key] = '[CLINICAL_TEXT_REDACTED]';
+      continue;
+    }
+
     // PRESERVE: valueQuantity, valueCodeableConcept, doseAndRate, dosageInstruction
     if (
       key === 'valueQuantity' ||
@@ -205,13 +292,42 @@ function deidentifyResource(
         result[key] = '[CLINICAL_TEXT_REDACTED]';
         continue;
       }
+      // Recurse vào nested objects để redact free-text bên trong (e.g. code.text, dosageInstruction.text)
+      if (typeof value === 'object' && !Array.isArray(value)) {
+        result[key] = deidentifyResource(
+          value as Record<string, unknown>,
+          secret,
+          offsetDays,
+          effectiveResourceType,
+        );
+        continue;
+      }
+      if (Array.isArray(value)) {
+        result[key] = value.map((item) => {
+          if (typeof item === 'object' && item !== null && !Array.isArray(item)) {
+            return deidentifyResource(
+              item as Record<string, unknown>,
+              secret,
+              offsetDays,
+              effectiveResourceType,
+            );
+          }
+          return item;
+        });
+        continue;
+      }
       result[key] = value;
       continue;
     }
 
-    // Recurse into nested objects
+    // Recurse into nested objects — truyền resourceType để xử lý Organization/Location đúng
     if (typeof value === 'object' && !Array.isArray(value)) {
-      result[key] = deidentifyResource(value as Record<string, unknown>, secret, offsetDays);
+      result[key] = deidentifyResource(
+        value as Record<string, unknown>,
+        secret,
+        offsetDays,
+        effectiveResourceType,
+      );
       continue;
     }
 
@@ -219,7 +335,12 @@ function deidentifyResource(
     if (Array.isArray(value)) {
       result[key] = value.map((item) => {
         if (typeof item === 'object' && item !== null && !Array.isArray(item)) {
-          return deidentifyResource(item as Record<string, unknown>, secret, offsetDays);
+          return deidentifyResource(
+            item as Record<string, unknown>,
+            secret,
+            offsetDays,
+            effectiveResourceType,
+          );
         }
         return item;
       });
@@ -257,7 +378,15 @@ export function deidentify(bundle: Bundle, hmacSecret: string): DeidentifyResult
     if (!entry.resource) return entry;
 
     const rawResource = entry.resource as unknown as Record<string, unknown>;
-    const deidentifiedResource = deidentifyResource(rawResource, hmacSecret, offsetDays);
+    // Truyền resourceType để xử lý Organization/Location name redaction đúng
+    const entryResourceType =
+      typeof rawResource['resourceType'] === 'string' ? rawResource['resourceType'] : undefined;
+    const deidentifiedResource = deidentifyResource(
+      rawResource,
+      hmacSecret,
+      offsetDays,
+      entryResourceType,
+    );
 
     return {
       ...entry,

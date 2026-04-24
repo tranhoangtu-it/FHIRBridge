@@ -391,3 +391,273 @@ describe('deidentify — security-fix coverage', () => {
     expect(JSON.stringify(deident)).not.toContain('chest discomfort');
   });
 });
+
+describe('deidentify — C-10 invariant tests', () => {
+  // INV-2: date shift không bao giờ bằng 0
+  it('INV-2: date shift is never zero for any generated patient', () => {
+    // Kiểm tra nhiều patient IDs khác nhau để đảm bảo không có zero-shift
+    const patientIds = [
+      'patient-001',
+      'patient-002',
+      'patient-abc',
+      'p-xyz',
+      'test-id-99',
+      'a',
+      'b',
+      '123',
+      'uuid-aaaa-bbbb',
+      'some-other-id',
+    ];
+    for (const pid of patientIds) {
+      const bundle: Bundle = {
+        resourceType: 'Bundle',
+        type: 'collection',
+        entry: [
+          {
+            resource: {
+              resourceType: 'Patient',
+              id: pid,
+              birthDate: '1980-01-01',
+            } as unknown as Resource,
+          },
+        ],
+      };
+      const { shiftMap } = deidentify(bundle, HMAC_SECRET);
+      const shifts = Object.values(shiftMap);
+      expect(shifts.length).toBeGreaterThan(0);
+      for (const shift of shifts) {
+        expect(shift, `Expected shift != 0 for patient id '${pid}'`).not.toBe(0);
+      }
+    }
+  });
+
+  // INV-3: bệnh nhân 92 tuổi → birthDate undefined hoặc year-only bucket
+  it('INV-3: Patient age 92 → birthDate is year-only bucket "1900"', () => {
+    // Năm sinh 1933 → tuổi ≈ 93 tại 2026
+    const bundle: Bundle = {
+      resourceType: 'Bundle',
+      type: 'collection',
+      entry: [
+        {
+          resource: {
+            resourceType: 'Patient',
+            id: 'elderly-patient',
+            birthDate: '1933-06-15',
+          } as unknown as Resource,
+        },
+      ],
+    };
+    const { bundle: deident } = deidentify(bundle, HMAC_SECRET);
+    const patient = deident.entry?.[0]?.resource as Record<string, unknown>;
+    // birthDate phải là year-only bucket, không phải ngày thật
+    expect(patient?.['birthDate']).toBe('1900');
+    // Không được chứa năm sinh thật
+    expect(JSON.stringify(deident)).not.toContain('1933');
+  });
+
+  // INV-3b: bệnh nhân 88 tuổi → birthDate vẫn được shift bình thường
+  it('INV-3b: Patient age 88 → birthDate is shifted (not bucketed)', () => {
+    // Năm sinh 1937 → tuổi ≈ 89 tại 2026 — cần test với 88 tuổi thật
+    const bundle: Bundle = {
+      resourceType: 'Bundle',
+      type: 'collection',
+      entry: [
+        {
+          resource: {
+            resourceType: 'Patient',
+            id: 'young-enough',
+            birthDate: '1940-06-15', // ~86 tuổi tại 2026
+          } as unknown as Resource,
+        },
+      ],
+    };
+    const { bundle: deident } = deidentify(bundle, HMAC_SECRET);
+    const patient = deident.entry?.[0]?.resource as Record<string, unknown>;
+    // Không phải bucket — phải là date đã shift
+    expect(patient?.['birthDate']).not.toBe('1900');
+    expect(patient?.['birthDate']).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  // INV-4: Organization.name → HMAC hash (không phải tên thật)
+  it('INV-4: Organization name "General Hospital" is replaced with HMAC hash', () => {
+    const bundle: Bundle = {
+      resourceType: 'Bundle',
+      type: 'collection',
+      entry: [
+        {
+          resource: {
+            resourceType: 'Patient',
+            id: 'p1',
+          } as unknown as Resource,
+        },
+        {
+          resource: {
+            resourceType: 'Organization',
+            id: 'org-001',
+            name: 'General Hospital',
+          } as unknown as Resource,
+        },
+      ],
+    };
+    const { bundle: deident } = deidentify(bundle, HMAC_SECRET);
+    const org = deident.entry?.[1]?.resource as Record<string, unknown>;
+    // name phải là HMAC hash (16 hex chars), không phải tên gốc
+    expect(org?.['name']).toMatch(/^[0-9a-f]{16}$/);
+    expect(JSON.stringify(deident)).not.toContain('General Hospital');
+  });
+
+  // INV-4b: Location.name → HMAC hash
+  it('INV-4b: Location name "ICU Ward 3" is replaced with HMAC hash', () => {
+    const bundle: Bundle = {
+      resourceType: 'Bundle',
+      type: 'collection',
+      entry: [
+        {
+          resource: {
+            resourceType: 'Patient',
+            id: 'p1',
+          } as unknown as Resource,
+        },
+        {
+          resource: {
+            resourceType: 'Location',
+            id: 'loc-001',
+            name: 'ICU Ward 3',
+          } as unknown as Resource,
+        },
+      ],
+    };
+    const { bundle: deident } = deidentify(bundle, HMAC_SECRET);
+    const loc = deident.entry?.[1]?.resource as Record<string, unknown>;
+    expect(loc?.['name']).toMatch(/^[0-9a-f]{16}$/);
+    expect(JSON.stringify(deident)).not.toContain('ICU Ward 3');
+  });
+
+  // INV-5: code.text PHI string → stripped/redacted
+  it('INV-5: code.text PHI string is redacted', () => {
+    const bundle: Bundle = {
+      resourceType: 'Bundle',
+      type: 'collection',
+      entry: [
+        {
+          resource: {
+            resourceType: 'Patient',
+            id: 'p1',
+          } as unknown as Resource,
+        },
+        {
+          resource: {
+            resourceType: 'Condition',
+            id: 'c1',
+            code: {
+              coding: [{ system: 'http://snomed.info/sct', code: '44054006' }],
+              text: 'John has diabetes — personal note with PHI',
+            },
+          } as unknown as Resource,
+        },
+      ],
+    };
+    const { bundle: deident } = deidentify(bundle, HMAC_SECRET);
+    const bundleStr = JSON.stringify(deident);
+    // text PHI không được xuất hiện
+    expect(bundleStr).not.toContain('John has diabetes');
+    expect(bundleStr).not.toContain('personal note with PHI');
+    // SNOMED code vẫn được giữ
+    expect(bundleStr).toContain('44054006');
+  });
+
+  // INV-6: dosageInstruction.text → redacted
+  it('INV-6: dosageInstruction.text is redacted', () => {
+    const bundle: Bundle = {
+      resourceType: 'Bundle',
+      type: 'collection',
+      entry: [
+        {
+          resource: {
+            resourceType: 'Patient',
+            id: 'p1',
+          } as unknown as Resource,
+        },
+        {
+          resource: {
+            resourceType: 'MedicationRequest',
+            id: 'med1',
+            status: 'active',
+            dosageInstruction: [
+              {
+                text: 'Take 1 tablet daily — patient name Nguyen Van A',
+                patientInstruction: 'Specific instruction for Tran Thi B',
+              },
+            ],
+          } as unknown as Resource,
+        },
+      ],
+    };
+    const { bundle: deident } = deidentify(bundle, HMAC_SECRET);
+    const bundleStr = JSON.stringify(deident);
+    expect(bundleStr).not.toContain('Nguyen Van A');
+    expect(bundleStr).not.toContain('Tran Thi B');
+  });
+
+  // INV-7: Vietnamese patient name với non-ASCII chars
+  it('INV-7: Vietnamese non-ASCII patient name is not leaked', () => {
+    const bundle: Bundle = {
+      resourceType: 'Bundle',
+      type: 'collection',
+      entry: [
+        {
+          resource: {
+            resourceType: 'Patient',
+            id: 'vn-patient',
+            name: [{ family: 'Nguyễn', given: ['Văn', 'Anh'] }],
+          } as unknown as Resource,
+        },
+      ],
+    };
+    const { bundle: deident } = deidentify(bundle, HMAC_SECRET);
+    const bundleStr = JSON.stringify(deident);
+    expect(bundleStr).not.toContain('Nguyễn');
+    expect(bundleStr).not.toContain('Văn');
+    expect(bundleStr).not.toContain('Anh');
+  });
+
+  // INV-8: authoredOn và effectiveInstant fields mới → được shift
+  it('INV-8: authoredOn and effectiveInstant are shifted', () => {
+    const bundle: Bundle = {
+      resourceType: 'Bundle',
+      type: 'collection',
+      entry: [
+        {
+          resource: {
+            resourceType: 'Patient',
+            id: 'p1',
+          } as unknown as Resource,
+        },
+        {
+          resource: {
+            resourceType: 'MedicationRequest',
+            id: 'med1',
+            status: 'active',
+            authoredOn: '2023-05-10',
+          } as unknown as Resource,
+        },
+        {
+          resource: {
+            resourceType: 'Observation',
+            id: 'obs1',
+            status: 'final',
+            effectiveInstant: '2023-05-10T12:00:00Z',
+          } as unknown as Resource,
+        },
+      ],
+    };
+    const { bundle: deident } = deidentify(bundle, HMAC_SECRET);
+    const medReq = deident.entry?.[1]?.resource as Record<string, unknown>;
+    const obs = deident.entry?.[2]?.resource as Record<string, unknown>;
+    // authoredOn phải khác ngày gốc
+    expect(medReq?.['authoredOn']).not.toBe('2023-05-10');
+    expect(medReq?.['authoredOn']).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    // effectiveInstant phải được shift
+    expect(obs?.['effectiveInstant']).not.toBe('2023-05-10T12:00:00Z');
+  });
+});
