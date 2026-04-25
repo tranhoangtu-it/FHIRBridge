@@ -22,3 +22,7 @@ export type { PaymentProviderAdapter, WebhookEvent } from './payment-provider-in
 // Concrete providers
 export { StripeProvider } from './stripe-provider.js';
 export { SepayProvider } from './sepay-provider.js';
+
+// Webhook replay protection
+export { InMemoryNonceStore } from './webhook-nonce-store.js';
+export type { INonceStore } from './webhook-nonce-store.js';
