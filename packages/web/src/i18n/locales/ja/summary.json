@@ -1,0 +1,15 @@
+{
+  "_TODO": "JA translation v1.1 — placeholder content is VI text",
+  "section": {
+    "title": "Tóm tắt AI",
+    "generate_button": "Tạo tóm tắt",
+    "regenerate_button": "Tạo lại",
+    "copy_button": "Sao chép",
+    "copied": "Đã sao chép!",
+    "loading": "Đang tạo tóm tắt…",
+    "empty": "Chưa có tóm tắt. Nhấn \"Tạo tóm tắt\" để bắt đầu.",
+    "provider_label": "Nhà cung cấp AI",
+    "model_label": "Mô hình",
+    "language_label": "Ngôn ngữ tóm tắt"
+  }
+}

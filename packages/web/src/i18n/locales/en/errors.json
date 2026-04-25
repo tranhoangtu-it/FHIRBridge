@@ -1,0 +1,16 @@
+{
+  "generic": "An error occurred. Please try again.",
+  "network": "Unable to reach the server. Check your network connection.",
+  "unauthorized": "Your session has expired. Please log in again.",
+  "forbidden": "You do not have permission to perform this action.",
+  "not_found": "The requested resource was not found.",
+  "rate_limited": "Too many requests. Please wait before trying again.",
+  "quota_exceeded": "You have reached your monthly export limit. Upgrade your plan to continue.",
+  "export_failed": "Export failed. Check your HIS connection and try again.",
+  "ai_unavailable": "AI service is temporarily unavailable. Please try again later.",
+  "validation": {
+    "required": "This field is required.",
+    "invalid_url": "Invalid URL.",
+    "invalid_date": "Invalid date."
+  }
+}

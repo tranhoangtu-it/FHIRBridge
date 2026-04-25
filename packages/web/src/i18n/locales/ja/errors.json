@@ -1,0 +1,17 @@
+{
+  "_TODO": "JA translation v1.1 — placeholder content is VI text",
+  "generic": "Đã xảy ra lỗi. Vui lòng thử lại.",
+  "network": "Không thể kết nối đến máy chủ. Kiểm tra kết nối mạng.",
+  "unauthorized": "Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.",
+  "forbidden": "Bạn không có quyền thực hiện thao tác này.",
+  "not_found": "Không tìm thấy tài nguyên yêu cầu.",
+  "rate_limited": "Quá nhiều yêu cầu. Vui lòng chờ trước khi thử lại.",
+  "quota_exceeded": "Bạn đã dùng hết giới hạn xuất dữ liệu tháng này. Nâng cấp gói để tiếp tục.",
+  "export_failed": "Xuất dữ liệu thất bại. Kiểm tra kết nối HIS và thử lại.",
+  "ai_unavailable": "Dịch vụ AI tạm thời không khả dụng. Thử lại sau.",
+  "validation": {
+    "required": "Trường này là bắt buộc.",
+    "invalid_url": "URL không hợp lệ.",
+    "invalid_date": "Ngày không hợp lệ."
+  }
+}

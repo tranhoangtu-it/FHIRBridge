@@ -1,0 +1,18 @@
+{
+  "_TODO": "JA translation v1.1 — placeholder content is VI text",
+  "modal": {
+    "title": "Lưu ý quan trọng: AI Summary và HIPAA",
+    "title_sub": "Important Notice: AI Summary & HIPAA",
+    "close_aria": "Hủy và đóng (Cancel)",
+    "bullets": [
+      "Anthropic (Claude) và OpenAI (GPT) hiện KHÔNG có BAA HIPAA với FHIRBridge hosted.",
+      "Tính năng AI Summary hosted chỉ dành cho cá nhân tự xuất dữ liệu của mình (self-directed consumer).",
+      "Nếu bạn là HIPAA-covered entity hoặc business associate, hãy self-host FHIRBridge với BAA của chính bạn (Azure OpenAI / AWS Bedrock)."
+    ],
+    "docs_link_prefix": "Xem thêm:",
+    "docs_link_label": "BAA Strategy & Self-hosting Guide",
+    "checkbox_label": "Tôi xác nhận đã đọc và đồng ý — Tôi không phải HIPAA-covered entity đang xử lý PHI thương mại.",
+    "cancel_button": "Hủy",
+    "confirm_button": "Đồng ý, bật AI Summary"
+  }
+}

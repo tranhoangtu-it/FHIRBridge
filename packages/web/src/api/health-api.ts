@@ -11,7 +11,8 @@ export interface HealthStatus {
 }
 
 export const healthApi = {
+  /** GET /api/v1/health */
   async checkHealth(): Promise<HealthStatus> {
-    return apiClient.get<HealthStatus>('/health');
+    return apiClient.get<HealthStatus>('/v1/health');
   },
 };

@@ -1,0 +1,27 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "export": "Export Data",
+    "import": "Import Data",
+    "settings": "Settings",
+    "summary": "AI Summary"
+  },
+  "status": {
+    "checking": "Checking…",
+    "api_online": "API online",
+    "api_offline": "API offline"
+  },
+  "language": {
+    "label": "Language",
+    "vi": "Tiếng Việt",
+    "en": "English",
+    "ja": "日本語"
+  },
+  "action": {
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "close": "Close",
+    "save": "Save",
+    "retry": "Retry"
+  }
+}

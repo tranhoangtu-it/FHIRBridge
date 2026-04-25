@@ -1,0 +1,28 @@
+{
+  "_TODO": "JA translation v1.1 — placeholder content is VI text",
+  "nav": {
+    "dashboard": "Dashboard",
+    "export": "Xuất dữ liệu",
+    "import": "Nhập dữ liệu",
+    "settings": "Cài đặt",
+    "summary": "Tóm tắt AI"
+  },
+  "status": {
+    "checking": "Đang kiểm tra…",
+    "api_online": "API online",
+    "api_offline": "API offline"
+  },
+  "language": {
+    "label": "Ngôn ngữ",
+    "vi": "Tiếng Việt",
+    "en": "English",
+    "ja": "日本語"
+  },
+  "action": {
+    "cancel": "Hủy",
+    "confirm": "Xác nhận",
+    "close": "Đóng",
+    "save": "Lưu",
+    "retry": "Thử lại"
+  }
+}

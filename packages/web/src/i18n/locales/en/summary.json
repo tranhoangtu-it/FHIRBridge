@@ -1,0 +1,14 @@
+{
+  "section": {
+    "title": "AI Summary",
+    "generate_button": "Generate summary",
+    "regenerate_button": "Regenerate",
+    "copy_button": "Copy",
+    "copied": "Copied!",
+    "loading": "Generating summary…",
+    "empty": "No summary yet. Click \"Generate summary\" to start.",
+    "provider_label": "AI Provider",
+    "model_label": "Model",
+    "language_label": "Summary language"
+  }
+}

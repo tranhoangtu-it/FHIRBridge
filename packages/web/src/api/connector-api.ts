@@ -20,15 +20,26 @@ export interface UploadedFile {
 }
 
 export const connectorApi = {
-  async testConnection(url: string, clientId?: string, clientSecret?: string): Promise<ConnectionTestResult> {
-    return apiClient.post<ConnectionTestResult>('/connectors/test', {
-      url,
-      clientId,
-      clientSecret,
+  /**
+   * POST /api/v1/connectors/test
+   * Server expects { type: 'fhir-endpoint', config: FhirEndpointConfig }.
+   */
+  async testConnection(
+    url: string,
+    clientId?: string,
+    clientSecret?: string,
+  ): Promise<ConnectionTestResult> {
+    return apiClient.post<ConnectionTestResult>('/v1/connectors/test', {
+      type: 'fhir-endpoint',
+      config: { baseUrl: url, clientId, clientSecret },
     });
   },
 
+  /**
+   * POST /api/v1/connectors/import — multipart upload
+   * Server endpoint is /import (not /upload).
+   */
   async uploadFile(file: File): Promise<UploadedFile> {
-    return apiClient.upload<UploadedFile>('/connectors/upload', file);
+    return apiClient.upload<UploadedFile>('/v1/connectors/import', file);
   },
 };

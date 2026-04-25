@@ -37,7 +37,9 @@ export function DashboardPage() {
     }
   }, []);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
   return (
     <PageContainer
@@ -62,7 +64,11 @@ export function DashboardPage() {
           <Activity className="h-4 w-4 text-gray-400" aria-hidden />
           <span className="text-gray-600 dark:text-gray-300">
             API status:{' '}
-            <span className={health.status === 'ok' ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
+            <span
+              className={
+                health.status === 'ok' ? 'text-green-600 font-medium' : 'text-red-600 font-medium'
+              }
+            >
               {health.status}
             </span>
           </span>
@@ -106,29 +112,49 @@ export function DashboardPage() {
         </div>
 
         {loading ? (
-          <div className="py-8"><LoadingSpinner /></div>
+          <div className="py-8">
+            <LoadingSpinner />
+          </div>
         ) : error ? (
           <p className="px-4 py-6 text-center text-sm text-red-500">{error}</p>
         ) : exports.length === 0 ? (
-          <p className="px-4 py-6 text-center text-sm text-gray-500">No exports yet. Start with "New Export".</p>
+          <p className="px-4 py-6 text-center text-sm text-gray-500">
+            No exports yet. Start with "New Export".
+          </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50 dark:border-gray-700 dark:bg-gray-800">
-                  <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Date</th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Patient ID</th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Resources</th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Status</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    Date
+                  </th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    Patient ID
+                  </th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    Resources
+                  </th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    Status
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                 {exports.map((job) => (
                   <tr key={job.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
-                    <td className="px-4 py-2 text-gray-600 dark:text-gray-400 whitespace-nowrap">{formatDate(job.createdAt)}</td>
-                    <td className="px-4 py-2 font-mono text-gray-700 dark:text-gray-300">{maskPatientId(job.patientId)}</td>
-                    <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{formatCount(job.resourceCount, 'resource')}</td>
-                    <td className="px-4 py-2"><StatusBadge status={job.status} /></td>
+                    <td className="px-4 py-2 text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                      {formatDate(job.createdAt ?? '')}
+                    </td>
+                    <td className="px-4 py-2 font-mono text-gray-700 dark:text-gray-300">
+                      {maskPatientId(job.patientId ?? '')}
+                    </td>
+                    <td className="px-4 py-2 text-gray-600 dark:text-gray-400">
+                      {formatCount(job.resourceCount, 'resource')}
+                    </td>
+                    <td className="px-4 py-2">
+                      <StatusBadge status={job.status} />
+                    </td>
                   </tr>
                 ))}
               </tbody>

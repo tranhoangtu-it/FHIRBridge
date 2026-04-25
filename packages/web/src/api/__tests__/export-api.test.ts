@@ -1,5 +1,6 @@
 /**
- * Tests for exportApi — start, poll, list and download export jobs.
+ * Tests for exportApi — start, poll, and download FHIR export jobs.
+ * URL contract: /v1/export (base /api prepended by constants.ts).
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -17,14 +18,21 @@ vi.mock('../api-client', () => ({
 import { apiClient } from '../api-client';
 const mockApiClient = vi.mocked(apiClient);
 
-const MOCK_JOB = {
-  id: 'job-abc',
-  patientId: 'P001',
-  status: 'pending' as const,
-  progress: 0,
-  resourceCount: 0,
-  createdAt: '2024-01-01T00:00:00Z',
-  updatedAt: '2024-01-01T00:00:00Z',
+// Server StartExportResponse shape
+const MOCK_START_RESPONSE = {
+  exportId: 'job-abc',
+  status: 'processing' as const,
+};
+
+// Server ExportStatusResponse shape
+const MOCK_STATUS_RUNNING = {
+  status: 'processing' as const,
+  resourceCount: null,
+};
+
+const MOCK_STATUS_COMPLETE = {
+  status: 'complete' as const,
+  resourceCount: 42,
 };
 
 beforeEach(() => {
@@ -32,57 +40,66 @@ beforeEach(() => {
 });
 
 describe('exportApi.startExport', () => {
-  it('calls POST /exports with the request payload', async () => {
-    mockApiClient.post.mockResolvedValueOnce(MOCK_JOB);
-    const req = { connectorType: 'fhir' as const, format: 'json' as const };
+  it('calls POST /v1/export with mapped server body', async () => {
+    mockApiClient.post.mockResolvedValueOnce(MOCK_START_RESPONSE);
+    const req = { connectorType: 'fhir' as const, format: 'json' as const, patientId: 'P001' };
     await exportApi.startExport(req);
-    expect(mockApiClient.post).toHaveBeenCalledWith('/exports', req);
+    expect(mockApiClient.post).toHaveBeenCalledWith(
+      '/v1/export',
+      expect.objectContaining({
+        patientId: 'P001',
+        connectorConfig: expect.objectContaining({ type: 'fhir-endpoint' }),
+      }),
+    );
   });
 
-  it('returns the created job', async () => {
-    mockApiClient.post.mockResolvedValueOnce(MOCK_JOB);
+  it('returns enriched ExportJob with id from exportId', async () => {
+    mockApiClient.post.mockResolvedValueOnce(MOCK_START_RESPONSE);
     const job = await exportApi.startExport({ connectorType: 'fhir', format: 'json' });
-    expect(job).toEqual(MOCK_JOB);
+    expect(job.id).toBe('job-abc');
+    expect(job.status).toBe('processing');
+    expect(job.progress).toBe(0);
   });
 });
 
 describe('exportApi.getStatus', () => {
-  it('calls GET /exports/:id', async () => {
-    mockApiClient.get.mockResolvedValueOnce(MOCK_JOB);
+  it('calls GET /v1/export/:id/status', async () => {
+    mockApiClient.get.mockResolvedValueOnce(MOCK_STATUS_RUNNING);
     await exportApi.getStatus('job-abc');
-    expect(mockApiClient.get).toHaveBeenCalledWith('/exports/job-abc');
+    expect(mockApiClient.get).toHaveBeenCalledWith('/v1/export/job-abc/status');
   });
 
-  it('returns the job', async () => {
-    const running = { ...MOCK_JOB, status: 'running' as const, progress: 50 };
-    mockApiClient.get.mockResolvedValueOnce(running);
+  it('returns progress=10 when still processing with no resources', async () => {
+    mockApiClient.get.mockResolvedValueOnce(MOCK_STATUS_RUNNING);
     const job = await exportApi.getStatus('job-abc');
-    expect(job.progress).toBe(50);
-    expect(job.status).toBe('running');
+    expect(job.status).toBe('processing');
+    expect(job.progress).toBe(10);
+    expect(job.resourceCount).toBe(0);
+  });
+
+  it('returns progress=100 when complete', async () => {
+    mockApiClient.get.mockResolvedValueOnce(MOCK_STATUS_COMPLETE);
+    const job = await exportApi.getStatus('job-abc');
+    expect(job.status).toBe('complete');
+    expect(job.progress).toBe(100);
+    expect(job.resourceCount).toBe(42);
   });
 });
 
 describe('exportApi.listExports', () => {
-  it('calls GET /exports', async () => {
-    mockApiClient.get.mockResolvedValueOnce([]);
-    await exportApi.listExports();
-    expect(mockApiClient.get).toHaveBeenCalledWith('/exports');
-  });
-
-  it('returns array of jobs', async () => {
-    mockApiClient.get.mockResolvedValueOnce([MOCK_JOB]);
+  it('returns empty array (no list endpoint on server)', async () => {
     const jobs = await exportApi.listExports();
-    expect(jobs).toHaveLength(1);
-    expect(jobs[0].id).toBe('job-abc');
+    expect(jobs).toEqual([]);
+    expect(mockApiClient.get).not.toHaveBeenCalled();
   });
 });
 
 describe('exportApi.downloadBundle', () => {
-  it('calls download with /exports/:id/bundle path', async () => {
+  it('calls download with /v1/export/:id/download path', async () => {
     const blob = new Blob(['{}']);
     mockApiClient.download.mockResolvedValueOnce(blob);
     await exportApi.downloadBundle('job-abc');
-    expect(mockApiClient.download).toHaveBeenCalledWith('/exports/job-abc/bundle');
+    expect(mockApiClient.download).toHaveBeenCalledWith('/v1/export/job-abc/download');
   });
 
   it('returns the blob data', async () => {

@@ -1,0 +1,17 @@
+{
+  "modal": {
+    "title": "Important Notice: AI Summary & HIPAA",
+    "title_sub": "Important Notice: AI Summary & HIPAA",
+    "close_aria": "Cancel and close",
+    "bullets": [
+      "Anthropic (Claude) and OpenAI (GPT) currently have NO HIPAA BAA with FHIRBridge hosted.",
+      "The hosted AI Summary feature is intended solely for individuals exporting their own data (self-directed consumer use).",
+      "If you are a HIPAA-covered entity or business associate, self-host FHIRBridge with your own BAA (Azure OpenAI / AWS Bedrock)."
+    ],
+    "docs_link_prefix": "Learn more:",
+    "docs_link_label": "BAA Strategy & Self-hosting Guide",
+    "checkbox_label": "I confirm I have read and agree — I am not a HIPAA-covered entity processing commercial PHI.",
+    "cancel_button": "Cancel",
+    "confirm_button": "Accept, enable AI Summary"
+  }
+}
