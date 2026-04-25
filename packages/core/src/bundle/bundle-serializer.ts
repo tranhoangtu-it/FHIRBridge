@@ -1,6 +1,7 @@
 /**
  * FHIR R4 Bundle serializer.
  * Converts Bundles to JSON, NDJSON, and Node.js ReadableStream.
+ * Also provides single-resource NDJSON line serialization for streaming exports.
  */
 
 import type { Bundle, Resource } from '@fhirbridge/types';
@@ -27,6 +28,17 @@ export function serializeToNdjson(bundle: Bundle): string {
   }
 
   return lines.join('\n');
+}
+
+/**
+ * Serialize một FHIR Resource thành một dòng NDJSON (có newline ở cuối).
+ * Dùng cho streaming export — không cần gom toàn bộ Bundle trước.
+ *
+ * @param resource - FHIR Resource cần serialize
+ * @returns JSON string + '\n' (chuẩn NDJSON RFC)
+ */
+export function serializeResourceAsNdjsonLine(resource: Resource): string {
+  return JSON.stringify(resource) + '\n';
 }
 
 /**

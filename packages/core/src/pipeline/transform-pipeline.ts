@@ -2,6 +2,8 @@
  * Streaming FHIR transform pipeline.
  * Processes AsyncIterable<RawRecord> into validated FHIR Bundles via async generators.
  * Never buffers a full dataset in memory.
+ *
+ * Hỗ trợ AbortSignal để dừng pipeline khi client ngắt kết nối (streaming export).
  */
 
 import type { Resource, Bundle, ValidationResult } from '@fhirbridge/types';
@@ -41,7 +43,8 @@ export interface PipelineConfig {
 export class TransformPipeline {
   private readonly config: Required<
     Pick<PipelineConfig, 'resourceType' | 'batchSize' | 'skipOnError'>
-  > & PipelineConfig;
+  > &
+    PipelineConfig;
 
   constructor(config: PipelineConfig) {
     this.config = {
@@ -55,20 +58,33 @@ export class TransformPipeline {
    * Process an async iterable of raw records, yielding validated Bundles.
    * Each emitted Bundle contains up to `batchSize` resources.
    *
-   * @throws Error if a resource fails validation and skipOnError is false
+   * @param source - Async iterable of raw records from connector
+   * @param signal - Optional AbortSignal; khi bị aborted, pipeline dừng ngay lập tức
+   *
+   * @throws DOMException với name='AbortError' nếu signal bị aborted
+   * @throws Error nếu resource fails validation và skipOnError = false
    */
-  async *pipe(source: AsyncIterable<RawRecord>): AsyncGenerator<Bundle> {
-    const { resourceType, mappingConfig, batchSize, onValidationWarning, skipOnError } = this.config;
+  async *pipe(source: AsyncIterable<RawRecord>, signal?: AbortSignal): AsyncGenerator<Bundle> {
+    const { resourceType, mappingConfig, batchSize, onValidationWarning, skipOnError } =
+      this.config;
     let builder = new BundleBuilder();
 
     for await (const rawRecord of source) {
+      // Kiểm tra AbortSignal trước mỗi record — dừng pipeline nếu client ngắt kết nối
+      if (signal?.aborted) {
+        // Cleanup upstream generator bằng cách return (kết thúc for-await-of sạch sẽ)
+        return;
+      }
+
       let resource: Resource;
 
       try {
         resource = transformToFhir(rawRecord, resourceType, mappingConfig);
       } catch (err) {
         if (skipOnError) continue;
-        throw new Error(`Transform failed for resourceType "${resourceType}": ${(err as Error).message}`);
+        throw new Error(
+          `Transform failed for resourceType "${resourceType}": ${(err as Error).message}`,
+        );
       }
 
       // Validate the transformed resource
@@ -90,14 +106,62 @@ export class TransformPipeline {
 
       // Yield a bundle when batch is full
       if (builder.getResourceCount() >= batchSize!) {
+        // Kiểm tra signal lần nữa trước khi yield để tránh write sau khi stream đóng
+        if (signal?.aborted) return;
         yield builder.build();
         builder = new BundleBuilder();
       }
     }
 
-    // Yield remaining resources
-    if (builder.getResourceCount() > 0) {
+    // Yield remaining resources (nếu chưa bị abort)
+    if (builder.getResourceCount() > 0 && !signal?.aborted) {
       yield builder.build();
+    }
+  }
+
+  /**
+   * Process raw records, yielding individual validated Resources (không wrap vào Bundle).
+   * Dùng cho NDJSON streaming — mỗi resource được yield ngay không cần đợi đủ batch.
+   *
+   * @param source - Async iterable of raw records
+   * @param signal - Optional AbortSignal để dừng stream
+   */
+  async *pipeResources(
+    source: AsyncIterable<RawRecord>,
+    signal?: AbortSignal,
+  ): AsyncGenerator<Resource> {
+    const { resourceType, mappingConfig, onValidationWarning, skipOnError } = this.config;
+
+    for await (const rawRecord of source) {
+      // Dừng ngay khi signal bị aborted
+      if (signal?.aborted) return;
+
+      let resource: Resource;
+
+      try {
+        resource = transformToFhir(rawRecord, resourceType, mappingConfig);
+      } catch (err) {
+        if (skipOnError) continue;
+        throw new Error(
+          `Transform failed for resourceType "${resourceType}": ${(err as Error).message}`,
+        );
+      }
+
+      const validation = validateResource(resource);
+
+      if (!validation.valid) {
+        if (skipOnError) continue;
+        throw new Error(
+          `Validation error in "${resourceType}": ${validation.errors.map((e) => `${e.path}: ${e.message}`).join('; ')}`,
+        );
+      }
+
+      if (validation.errors.length > 0 && onValidationWarning) {
+        onValidationWarning(validation, resourceType);
+      }
+
+      if (signal?.aborted) return;
+      yield resource;
     }
   }
 

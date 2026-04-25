@@ -28,14 +28,26 @@ export { validateResource, patterns } from './validators/resource-validator.js';
 export { validatePatient } from './validators/patient-validator.js';
 export { validateCoding, validateCodeableConcept } from './validators/coding-validator.js';
 export { validateReference, validateReferenceInBundle } from './validators/reference-validator.js';
+// Sprint 3+4 expansion: 7 additional resource validators
+export {
+  validateMedication,
+  validatePractitioner,
+  validateDocumentReference,
+  validateCarePlan,
+  validateCareTeam,
+  validateImmunization,
+  validateSpecimen,
+} from './validators/index.js';
 
 // ── Bundle utilities ─────────────────────────────────────────────────────────
 export { BundleBuilder } from './bundle/bundle-builder.js';
+export { IPSBundleBuilder, IPS_SECTION_CODES } from './bundle/ips-builder.js';
 export {
   serializeToJson,
   serializeToNdjson,
   parseNdjson,
   createReadableStream,
+  serializeResourceAsNdjsonLine,
 } from './bundle/bundle-serializer.js';
 
 // ── Pipeline ─────────────────────────────────────────────────────────────────
@@ -86,6 +98,9 @@ export {
 export type { PaymentProviderAdapter, WebhookEvent, IUsageTracker } from './billing/index.js';
 export { StripeProvider } from './billing/index.js';
 export { SepayProvider } from './billing/index.js';
+export { InMemoryUsageTracker } from './billing/index.js';
+export { InMemoryNonceStore } from './billing/index.js';
+export type { INonceStore } from './billing/index.js';
 
 // ── Security utilities ───────────────────────────────────────────────────────
 export { validateBaseUrl, validateBaseUrlWithDns } from './security/index.js';
