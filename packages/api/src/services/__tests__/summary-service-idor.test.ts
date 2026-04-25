@@ -7,12 +7,20 @@
  * - SummaryRecord chứa đúng userId sau startGeneration
  */
 
-import type { Bundle } from '@fhirbridge/types';
+import type { AuditLogEntry, Bundle } from '@fhirbridge/types';
 import { describe, it, expect } from 'vitest';
 import { SummaryService } from '../summary-service.js';
+import { AuditService, type AuditSink } from '../audit-service.js';
 
 function buildBundle(): Bundle {
   return { resourceType: 'Bundle', type: 'collection', entry: [] };
+}
+
+class CapturingAuditSink implements AuditSink {
+  entries: AuditLogEntry[] = [];
+  async write(entry: AuditLogEntry): Promise<void> {
+    this.entries.push(entry);
+  }
 }
 
 describe('SummaryService IDOR — C-2 ownership enforcement', () => {
@@ -69,6 +77,72 @@ describe('SummaryService IDOR — C-2 ownership enforcement', () => {
     // Không truyền userId — không có ownership check (dùng cho internal pipeline)
     const record = await svc.getStatus(id);
     expect(record).toBeDefined();
+  });
+
+  it('emits audit log entry on cross-tenant denial (AC-2)', async () => {
+    const sink = new CapturingAuditSink();
+    const audit = new AuditService(sink);
+    const svc = new SummaryService(
+      undefined,
+      undefined,
+      audit,
+      'test-salt-32-chars-min-required-here',
+    );
+
+    const id = await svc.startGeneration({
+      bundle: buildBundle(),
+      hmacSecret: 'test-secret',
+      userId: 'owner-user-005',
+    });
+
+    // Cross-tenant attempt
+    const record = await svc.getStatus(id, 'attacker-user-007');
+    expect(record).toBeUndefined();
+
+    expect(sink.entries).toHaveLength(1);
+    const entry = sink.entries[0]!;
+    expect(entry.action).toBe('summary_access_denied');
+    expect(entry.status).toBe('error');
+    expect(entry.metadata?.['summary_id']).toBe(id);
+    expect(entry.metadata?.['reason']).toBe('cross_tenant');
+    // Audit nhận hashed user IDs (không raw)
+    expect(entry.userIdHash).not.toBe('attacker-user-007');
+    expect(entry.userIdHash).toMatch(/^[0-9a-f]{16}$/);
+    expect(entry.metadata?.['owner_user_hash']).not.toBe('owner-user-005');
+  });
+
+  it('does NOT emit audit on legitimate access', async () => {
+    const sink = new CapturingAuditSink();
+    const audit = new AuditService(sink);
+    const svc = new SummaryService(
+      undefined,
+      undefined,
+      audit,
+      'test-salt-32-chars-min-required-here',
+    );
+
+    const id = await svc.startGeneration({
+      bundle: buildBundle(),
+      hmacSecret: 'test-secret',
+      userId: 'owner-user-006',
+    });
+
+    await svc.getStatus(id, 'owner-user-006');
+    expect(sink.entries).toHaveLength(0);
+  });
+
+  it('does NOT emit audit when record does not exist', async () => {
+    const sink = new CapturingAuditSink();
+    const audit = new AuditService(sink);
+    const svc = new SummaryService(
+      undefined,
+      undefined,
+      audit,
+      'test-salt-32-chars-min-required-here',
+    );
+
+    await svc.getStatus('non-existent-id', 'any-user');
+    expect(sink.entries).toHaveLength(0);
   });
 
   it('two separate users cannot access each other records', async () => {

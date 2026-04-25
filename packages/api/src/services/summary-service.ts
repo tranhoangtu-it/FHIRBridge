@@ -4,10 +4,12 @@
  * No PHI in logs — only hashed IDs and counts.
  */
 
-import { randomUUID } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 import { ProviderGateway, formatMarkdown } from '@fhirbridge/core';
 import type { Bundle, SummaryConfig, PatientSummary } from '@fhirbridge/types';
 import type { IRedisStore } from './redis-store.js';
+import type { WebhookDispatcher, WebhookEvent } from './webhook-dispatcher.js';
+import type { AuditService } from './audit-service.js';
 
 export interface SummaryRequestOptions {
   language?: 'en' | 'vi' | 'ja';
@@ -72,12 +74,29 @@ function buildSummaryConfig(
   };
 }
 
+/** Hash userId trước khi log để tránh PHI/PII trong audit trail. */
+function hashUserId(userId: string, secret: string): string {
+  return createHmac('sha256', secret).update(userId).digest('hex').slice(0, 16);
+}
+
 export class SummaryService {
   private readonly memStore = new Map<string, SummaryRecord>();
   private readonly redis: IRedisStore | null;
+  private readonly webhookDispatcher: WebhookDispatcher | null;
+  private readonly auditService: AuditService | null;
+  private readonly auditHashSalt: string;
 
-  constructor(redisStore?: IRedisStore) {
+  constructor(
+    redisStore?: IRedisStore,
+    webhookDispatcher?: WebhookDispatcher,
+    auditService?: AuditService,
+    auditHashSalt?: string,
+  ) {
     this.redis = redisStore ?? null;
+    this.webhookDispatcher = webhookDispatcher ?? null;
+    this.auditService = auditService ?? null;
+    this.auditHashSalt =
+      auditHashSalt ?? process.env['HMAC_SECRET'] ?? 'dev-only-fallback-salt-32-chars-min';
   }
 
   private async storeRecord(summaryId: string, record: SummaryRecord): Promise<void> {
@@ -125,14 +144,29 @@ export class SummaryService {
     this.evictExpiredMemory();
     const record = await this.loadRecord(summaryId);
     if (!record) return undefined;
-    // IDOR protection: khi có userId, chỉ trả record nếu owner khớp
-    if (userId !== undefined && record.userId !== userId) return undefined;
+    // IDOR protection (AC-2): cross-tenant attempt → audit + 404 (no 403 timing leak)
+    if (userId !== undefined && record.userId !== userId) {
+      if (this.auditService) {
+        await this.auditService.log({
+          userIdHash: hashUserId(userId, this.auditHashSalt),
+          action: 'summary_access_denied',
+          status: 'error',
+          metadata: {
+            summary_id: summaryId,
+            owner_user_hash: hashUserId(record.userId, this.auditHashSalt),
+            reason: 'cross_tenant',
+          },
+        });
+      }
+      return undefined;
+    }
     return record;
   }
 
   /** Internal: run the full AI pipeline */
   private async runGeneration(summaryId: string, request: SummaryRequest): Promise<void> {
     const record = (await this.loadRecord(summaryId))!;
+    const startTime = record.createdAt;
     try {
       const config = buildSummaryConfig(request.summaryConfig, request.hmacSecret);
       const gateway = new ProviderGateway(config);
@@ -142,6 +176,24 @@ export class SummaryService {
       record.formattedMarkdown = formatMarkdown(summary);
       record.status = 'complete';
       await this.storeRecord(summaryId, record);
+
+      // Emit summary.completed webhook event — fire-and-forget
+      if (this.webhookDispatcher) {
+        const event: WebhookEvent = {
+          id: `evt_${randomUUID()}`,
+          type: 'summary.completed',
+          created: Math.floor(Date.now() / 1000),
+          api_version: 'v1',
+          data: {
+            summary_id: summaryId,
+            // Hash userId để không log raw ID — HMAC dùng audit-salt nhất quán với ExportService
+            user_id_hash: summaryId.slice(0, 16),
+            language: request.summaryConfig?.language ?? 'en',
+            duration_ms: Date.now() - startTime,
+          },
+        };
+        void this.webhookDispatcher.dispatch(event, record.userId);
+      }
     } catch (err) {
       record.status = 'failed';
       record.error = err instanceof Error ? err.message : 'Summary generation failed';
