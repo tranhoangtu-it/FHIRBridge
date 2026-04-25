@@ -53,6 +53,39 @@ export type {
   BundleEntry,
   BundleType,
   BundleLink,
+  // Newly added resource types
+  Ratio,
+  Attachment,
+  Medication,
+  MedicationStatus,
+  MedicationIngredient,
+  MedicationBatch,
+  Practitioner,
+  PractitionerGender,
+  PractitionerQualification,
+  DocumentReference,
+  DocumentReferenceStatus,
+  DocumentReferenceDocStatus,
+  DocumentReferenceContent,
+  DocumentReferenceContext,
+  CarePlan,
+  CarePlanStatus,
+  CarePlanIntent,
+  CarePlanActivity,
+  CarePlanActivityStatus,
+  CarePlanActivityDetail,
+  CareTeam,
+  CareTeamStatus,
+  CareTeamParticipant,
+  Immunization,
+  ImmunizationStatus,
+  ImmunizationPerformer,
+  ImmunizationProtocolApplied,
+  Specimen,
+  SpecimenStatus,
+  SpecimenCollection,
+  SpecimenProcessing,
+  SpecimenContainer,
 } from './fhir/index.js';
 
 // ── FHIR R4 Core Resource Types ────────────────────────────────────────────
@@ -218,8 +251,11 @@ export type AuditAction =
   | 'export_complete'
   | 'export_error'
   | 'summary_generate'
+  | 'summary_access_denied'
   | 'auth_login'
-  | 'auth_logout';
+  | 'auth_logout'
+  | 'consent_grant'
+  | 'consent_revoke';
 
 // ── API Types ───────────────────────────────────────────────────────────────
 

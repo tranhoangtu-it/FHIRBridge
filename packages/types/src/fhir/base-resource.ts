@@ -138,6 +138,32 @@ export interface Dosage {
   }>;
 }
 
+/** FHIR Ratio — numerator/denominator quantity pair (FHIR R4 §2.24.0.2) */
+export interface Ratio {
+  numerator?: Quantity;
+  denominator?: Quantity;
+}
+
+/** FHIR Attachment — content in a format such as PDF, image, or HL7 v2 message */
+export interface Attachment {
+  /** MIME type — e.g. "application/pdf", "image/png" */
+  contentType?: string;
+  /** BCP 47 language code */
+  language?: string;
+  /** Base64-encoded data */
+  data?: string;
+  /** URL pointing to external content */
+  url?: string;
+  /** Expected size in bytes */
+  size?: number;
+  /** MD5 hash of data for integrity check */
+  hash?: string;
+  /** Human-readable title */
+  title?: string;
+  /** Date of creation (ISO 8601 datetime) */
+  creation?: string;
+}
+
 // ── Base resource interfaces ─────────────────────────────────────────────────
 
 /** Base FHIR Resource — every resource has resourceType and optional id */

@@ -36,11 +36,7 @@ export type {
   EncounterHospitalization,
 } from './encounter.js';
 
-export type {
-  Condition,
-  ConditionEvidence,
-  ConditionStage,
-} from './condition.js';
+export type { Condition, ConditionEvidence, ConditionStage } from './condition.js';
 
 export type {
   Observation,
@@ -91,3 +87,53 @@ export type {
   BundleEntrySearch,
   BundleEntrySearchMode,
 } from './bundle.js';
+
+export type {
+  Medication,
+  MedicationStatus,
+  MedicationIngredient,
+  MedicationBatch,
+} from './medication.js';
+
+export type {
+  Practitioner,
+  PractitionerGender,
+  PractitionerQualification,
+} from './practitioner.js';
+
+export type {
+  DocumentReference,
+  DocumentReferenceStatus,
+  DocumentReferenceDocStatus,
+  DocumentReferenceContent,
+  DocumentReferenceContext,
+} from './document-reference.js';
+
+export type {
+  CarePlan,
+  CarePlanStatus,
+  CarePlanIntent,
+  CarePlanActivityStatus,
+  CarePlanActivity,
+  CarePlanActivityDetail,
+} from './care-plan.js';
+
+export type { CareTeam, CareTeamStatus, CareTeamParticipant } from './care-team.js';
+
+export type {
+  Immunization,
+  ImmunizationStatus,
+  ImmunizationPerformer,
+  ImmunizationProtocolApplied,
+} from './immunization.js';
+
+export type {
+  Specimen,
+  SpecimenStatus,
+  SpecimenCollection,
+  SpecimenProcessing,
+  SpecimenContainer,
+} from './specimen.js';
+
+// Expose newly added base types for downstream use
+export type { Ratio, Attachment } from './base-resource.js';
