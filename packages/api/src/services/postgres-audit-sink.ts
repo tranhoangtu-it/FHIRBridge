@@ -2,6 +2,9 @@
  * Postgres-backed AuditSink — batches writes for efficiency.
  * Implements the AuditSink interface from audit-service.ts.
  * PRIVACY: only receives pre-hashed user IDs, no raw PHI.
+ *
+ * BOUNDED QUEUE: pending array bị giới hạn ở MAX_PENDING_ENTRIES để ngăn OOM
+ * khi Postgres down kéo dài. Khi queue đầy, entry CŨ NHẤT bị drop (FIFO eviction).
  */
 
 import { Pool } from 'pg';
@@ -11,11 +14,28 @@ import type { AuditSink } from './audit-service.js';
 const FLUSH_INTERVAL_MS = 5_000;
 const FLUSH_BATCH_SIZE = 50;
 
+/**
+ * Giới hạn tối đa entries trong pending queue.
+ * Khi Postgres down, mỗi write + mỗi re-queue đều push vào pending.
+ * Không có bound → unbounded growth → OOM.
+ * 10_000 entries ~ 10_000 × ~500B = ~5MB — an toàn dưới áp lực cao.
+ */
+const MAX_PENDING_ENTRIES = 10_000;
+
+/** Cứ mỗi bao nhiêu lần drop thì log warning một lần — tránh flood logs */
+const DROP_LOG_INTERVAL = 1_000;
+
 export class PostgresAuditSink implements AuditSink {
   private readonly pool: Pool;
   private readonly pending: AuditLogEntry[] = [];
   private flushTimer: ReturnType<typeof setInterval> | null = null;
   private healthy = false;
+
+  /**
+   * Đếm tổng số entries bị drop do queue đầy.
+   * Dùng cho observability — expose qua getDroppedEntryCount().
+   */
+  private droppedEntryCount = 0;
 
   constructor(databaseUrl: string) {
     this.pool = new Pool({
@@ -54,9 +74,48 @@ export class PostgresAuditSink implements AuditSink {
     return this.healthy;
   }
 
+  /**
+   * Tổng số entries bị drop do bounded queue overflow.
+   * Metric này dùng cho /metrics endpoint hoặc health check dashboard.
+   * Counter không reset — cumulative để dễ alert khi tăng bất thường.
+   */
+  getDroppedEntryCount(): number {
+    return this.droppedEntryCount;
+  }
+
+  /**
+   * Số entries đang chờ flush trong queue.
+   * Dùng cho /metrics endpoint để monitor backlog size.
+   */
+  getPendingCount(): number {
+    return this.pending.length;
+  }
+
+  /**
+   * Push một entry vào bounded queue.
+   * Nếu queue đã đầy (>= MAX_PENDING_ENTRIES), drop entry CŨ NHẤT (FIFO eviction)
+   * trước khi push entry mới — ưu tiên data mới hơn data cũ.
+   */
+  private pushBounded(entry: AuditLogEntry): void {
+    if (this.pending.length >= MAX_PENDING_ENTRIES) {
+      // Drop oldest entry để nhường chỗ cho entry mới
+      this.pending.shift();
+      this.droppedEntryCount++;
+
+      // Log warning theo interval — tránh flood logs khi Postgres down kéo dài
+      if (this.droppedEntryCount % DROP_LOG_INTERVAL === 0) {
+        console.warn(
+          `[PostgresAuditSink] bounded queue overflow: ${this.droppedEntryCount} entries dropped total. ` +
+            `Postgres may be down or overloaded.`,
+        );
+      }
+    }
+    this.pending.push(entry);
+  }
+
   /** Collect entry for batched write — never blocks caller */
   async write(entry: AuditLogEntry): Promise<void> {
-    this.pending.push(entry);
+    this.pushBounded(entry);
     if (this.pending.length >= FLUSH_BATCH_SIZE) {
       this.flush().catch((err: Error) => {
         console.error('[PostgresAuditSink] batch flush failed:', err.message);
@@ -71,8 +130,12 @@ export class PostgresAuditSink implements AuditSink {
 
     const client = await this.pool.connect().catch((err: Error) => {
       console.error('[PostgresAuditSink] flush: connect failed:', err.message);
-      // Re-queue entries that could not be written
-      this.pending.unshift(...batch);
+      // Re-queue entries qua pushBounded để đảm bảo bound được giữ nguyên.
+      // Nếu queue gần đầy, các entries cũ nhất trong batch sẽ bị drop —
+      // đây là trade-off chấp nhận được so với OOM.
+      for (const e of batch) {
+        this.pushBounded(e);
+      }
       return null;
     });
     if (!client) return;
