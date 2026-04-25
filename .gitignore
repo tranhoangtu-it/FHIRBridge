@@ -53,8 +53,11 @@ tests/fixtures/synthea/*.ndjson
 # Docker volumes
 docker/volumes/
 
-# Claude sessions
+# Claude sessions + project-private docs/plans (keep local-only, never push)
 .claude/
+CLAUDE.md
+docs/
+plans/
 
 # Lock file debug
 pnpm-debug.yaml
