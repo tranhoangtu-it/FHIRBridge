@@ -82,4 +82,22 @@ describe('Error handler', () => {
     // requestId may be present
     expect(body).toHaveProperty('statusCode');
   });
+
+  it('includes machine-readable code + docs_url (H-10)', async () => {
+    const v = (await app.inject({ method: 'GET', url: '/throw/validation' })).json();
+    expect(v.code).toBe('VALIDATION_ERROR');
+    expect(v.docs_url).toContain('validation_error');
+
+    const nf = (await app.inject({ method: 'GET', url: '/throw/not-found' })).json();
+    expect(nf.code).toBe('NOT_FOUND');
+    expect(nf.docs_url).toContain('not_found');
+
+    const conn = (await app.inject({ method: 'GET', url: '/throw/connector' })).json();
+    // ConnectorError has .code=NETWORK_ERROR — preserved
+    expect(conn.code).toBe('NETWORK_ERROR');
+
+    const int = (await app.inject({ method: 'GET', url: '/throw/internal' })).json();
+    expect(int.code).toBe('INTERNAL_ERROR');
+    expect(int.docs_url).toContain('internal_error');
+  });
 });
