@@ -2,6 +2,9 @@
  * Base FHIR resource validator.
  * Validates common fields present on all FHIR resources.
  * Does NOT log resource content — only field paths are referenced in errors.
+ *
+ * Includes FHIR R4 §MedicationRequest medication[x] choice enforcement:
+ * exactly one of medicationCodeableConcept | medicationReference must be present.
  */
 
 import type { Resource, ValidationResult, ValidationError } from '@fhirbridge/types';
@@ -24,11 +27,57 @@ const DATETIME_PATTERN = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-
 
 /** Known FHIR R4 resource types */
 const KNOWN_RESOURCE_TYPES = new Set([
-  'Patient', 'Encounter', 'Condition', 'Observation', 'MedicationRequest',
-  'AllergyIntolerance', 'Procedure', 'DiagnosticReport', 'Bundle',
-  'Practitioner', 'Organization', 'Location', 'Device', 'Medication',
-  'Immunization', 'CarePlan', 'CareTeam', 'Goal', 'ServiceRequest',
+  'Patient',
+  'Encounter',
+  'Condition',
+  'Observation',
+  'MedicationRequest',
+  'AllergyIntolerance',
+  'Procedure',
+  'DiagnosticReport',
+  'Bundle',
+  'Composition',
+  'Practitioner',
+  'Organization',
+  'Location',
+  'Device',
+  'Medication',
+  'Immunization',
+  'CarePlan',
+  'CareTeam',
+  'Goal',
+  'ServiceRequest',
 ]);
+
+/**
+ * Enforce FHIR R4 §MedicationRequest medication[x] choice constraint.
+ * Exactly one of medicationCodeableConcept | medicationReference must be present.
+ * @returns ValidationError nếu vi phạm, null nếu hợp lệ
+ */
+function validateMedicationChoice(res: Record<string, unknown>): ValidationError | null {
+  const hasCC = res['medicationCodeableConcept'] != null;
+  const hasRef = res['medicationReference'] != null;
+
+  if (hasCC && hasRef) {
+    return {
+      path: 'medication[x]',
+      message:
+        'MedicationRequest.medication[x] violates choice: both medicationCodeableConcept and ' +
+        'medicationReference present (FHIR R4 §MedicationRequest)',
+      severity: 'error',
+    };
+  }
+  if (!hasCC && !hasRef) {
+    return {
+      path: 'medication[x]',
+      message:
+        'MedicationRequest.medication[x] is required: either medicationCodeableConcept or ' +
+        'medicationReference must be present',
+      severity: 'error',
+    };
+  }
+  return null;
+}
 
 /**
  * Validate a base FHIR resource for common structural requirements.
@@ -52,7 +101,11 @@ export function validateResource(resource: unknown): ValidationResult {
   if (!res['resourceType']) {
     errors.push({ path: 'resourceType', message: 'resourceType is required', severity: 'error' });
   } else if (typeof res['resourceType'] !== 'string') {
-    errors.push({ path: 'resourceType', message: 'resourceType must be a string', severity: 'error' });
+    errors.push({
+      path: 'resourceType',
+      message: 'resourceType must be a string',
+      severity: 'error',
+    });
   } else if (!KNOWN_RESOURCE_TYPES.has(res['resourceType'] as string)) {
     errors.push({
       path: 'resourceType',
@@ -77,14 +130,29 @@ export function validateResource(resource: unknown): ValidationResult {
     } else {
       const meta = res['meta'] as Record<string, unknown>;
       if (meta['lastUpdated'] !== undefined && typeof meta['lastUpdated'] !== 'string') {
-        errors.push({ path: 'meta.lastUpdated', message: 'meta.lastUpdated must be a string', severity: 'warning' });
+        errors.push({
+          path: 'meta.lastUpdated',
+          message: 'meta.lastUpdated must be a string',
+          severity: 'warning',
+        });
       }
       if (meta['lastUpdated'] && typeof meta['lastUpdated'] === 'string') {
         if (!DATETIME_PATTERN.test(meta['lastUpdated'])) {
-          errors.push({ path: 'meta.lastUpdated', message: 'meta.lastUpdated must be a valid datetime', severity: 'warning' });
+          errors.push({
+            path: 'meta.lastUpdated',
+            message: 'meta.lastUpdated must be a valid datetime',
+            severity: 'warning',
+          });
         }
       }
     }
+  }
+
+  // ── Resource-specific choice enforcement ────────────────────────────────────
+  // MedicationRequest: medication[x] choice (FHIR R4 §MedicationRequest)
+  if (res['resourceType'] === 'MedicationRequest') {
+    const choiceError = validateMedicationChoice(res);
+    if (choiceError) errors.push(choiceError);
   }
 
   const hasErrors = errors.some((e) => e.severity === 'error');

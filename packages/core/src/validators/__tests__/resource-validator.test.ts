@@ -72,7 +72,9 @@ describe('validateResource', () => {
 
   it('returns warning for unknown resourceType', () => {
     const result = validateResource({ resourceType: 'UnknownFhirResource' });
-    const warnings = result.errors.filter((e) => e.severity === 'warning' && e.path === 'resourceType');
+    const warnings = result.errors.filter(
+      (e) => e.severity === 'warning' && e.path === 'resourceType',
+    );
     expect(warnings.length).toBeGreaterThan(0);
     // Should still be valid (only errors invalidate)
     expect(result.valid).toBe(true);
@@ -99,8 +101,13 @@ describe('validateResource', () => {
   });
 
   it('returns warning when meta.lastUpdated is not a valid datetime', () => {
-    const result = validateResource({ resourceType: 'Patient', meta: { lastUpdated: 'not-a-date' } });
-    const warnings = result.errors.filter((e) => e.path === 'meta.lastUpdated' && e.severity === 'warning');
+    const result = validateResource({
+      resourceType: 'Patient',
+      meta: { lastUpdated: 'not-a-date' },
+    });
+    const warnings = result.errors.filter(
+      (e) => e.path === 'meta.lastUpdated' && e.severity === 'warning',
+    );
     expect(warnings.length).toBeGreaterThan(0);
   });
 
@@ -110,5 +117,84 @@ describe('validateResource', () => {
       meta: { lastUpdated: '2024-03-15T14:22:33+05:30' },
     });
     expect(result.errors.filter((e) => e.path === 'meta.lastUpdated')).toHaveLength(0);
+  });
+
+  // ── Test: MedicationRequest.medication[x] choice enforcement ─────────────────
+  // Spec: FHIR R4 §MedicationRequest — exactly one of medicationCodeableConcept | medicationReference
+
+  it('accepts MedicationRequest with only medicationCodeableConcept', () => {
+    const result = validateResource({
+      resourceType: 'MedicationRequest',
+      id: 'med-req-001',
+      status: 'active',
+      intent: 'order',
+      medicationCodeableConcept: {
+        coding: [{ system: 'http://www.nlm.nih.gov/research/umls/rxnorm', code: '1049502' }],
+      },
+      subject: { reference: 'Patient/patient-001' },
+    });
+    expect(result.errors.filter((e) => e.path === 'medication[x]')).toHaveLength(0);
+    expect(result.valid).toBe(true);
+  });
+
+  it('accepts MedicationRequest with only medicationReference', () => {
+    const result = validateResource({
+      resourceType: 'MedicationRequest',
+      id: 'med-req-002',
+      status: 'active',
+      intent: 'order',
+      medicationReference: { reference: 'Medication/med-001' },
+      subject: { reference: 'Patient/patient-001' },
+    });
+    expect(result.errors.filter((e) => e.path === 'medication[x]')).toHaveLength(0);
+    expect(result.valid).toBe(true);
+  });
+
+  it('returns error when MedicationRequest has both medicationCodeableConcept and medicationReference', () => {
+    const result = validateResource({
+      resourceType: 'MedicationRequest',
+      id: 'med-req-003',
+      status: 'active',
+      intent: 'order',
+      medicationCodeableConcept: {
+        coding: [{ system: 'http://www.nlm.nih.gov/research/umls/rxnorm', code: '1049502' }],
+      },
+      medicationReference: { reference: 'Medication/med-001' },
+      subject: { reference: 'Patient/patient-001' },
+    });
+    const choiceErrors = result.errors.filter(
+      (e) => e.path === 'medication[x]' && e.severity === 'error',
+    );
+    expect(choiceErrors).toHaveLength(1);
+    expect(choiceErrors[0]?.message).toMatch(/both/);
+    expect(result.valid).toBe(false);
+  });
+
+  it('returns error when MedicationRequest has neither medicationCodeableConcept nor medicationReference', () => {
+    const result = validateResource({
+      resourceType: 'MedicationRequest',
+      id: 'med-req-004',
+      status: 'active',
+      intent: 'order',
+      subject: { reference: 'Patient/patient-001' },
+    });
+    const choiceErrors = result.errors.filter(
+      (e) => e.path === 'medication[x]' && e.severity === 'error',
+    );
+    expect(choiceErrors).toHaveLength(1);
+    expect(choiceErrors[0]?.message).toMatch(/required/);
+    expect(result.valid).toBe(false);
+  });
+
+  it('does not apply medication[x] check to non-MedicationRequest resources', () => {
+    // Observation without medication fields — should NOT produce medication[x] errors
+    const result = validateResource({
+      resourceType: 'Observation',
+      id: 'obs-002',
+      status: 'final',
+      code: { coding: [{ system: 'http://loinc.org', code: '8310-5' }] },
+    });
+    const choiceErrors = result.errors.filter((e) => e.path === 'medication[x]');
+    expect(choiceErrors).toHaveLength(0);
   });
 });
