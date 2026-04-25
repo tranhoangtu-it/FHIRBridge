@@ -1,68 +1,100 @@
 /**
  * Configuration loader for the FHIRBridge API server.
- * Reads environment variables and produces a typed config object.
- * Validates required fields at startup — throws on missing critical vars.
+ * Validates all required environment variables at startup via Zod schema.
+ * Fails fast with descriptive errors on misconfiguration.
  */
+
+import { z } from 'zod';
 
 /** User tier for rate limiting */
 export type UserTier = 'free' | 'paid';
 
-/** Typed API server configuration */
-export interface ApiConfig {
-  port: number;
-  host: string;
-  jwtSecret: string;
-  /** Comma-separated list of valid API keys */
-  apiKeys: string[];
-  corsOrigins: string[];
-  /** Optional — used for health check reporting */
-  databaseUrl?: string;
-  /** Optional — used for health check reporting */
-  redisUrl?: string;
-  /** HMAC secret for de-identification (passed to core) */
-  hmacSecret: string;
-  /** Log level for Fastify/Pino */
-  logLevel: string;
-  /** Proxy trust setting — use CIDR range in production, false by default */
-  trustProxy?: boolean | string;
-}
+/** Typed API server configuration — inferred from Zod schema */
+export type ApiConfig = z.infer<typeof ApiConfigSchema>;
 
-/** Load and validate configuration from environment variables */
+// ── Zod schema ────────────────────────────────────────────────────────────────
+
+const ApiConfigSchema = z
+  .object({
+    port: z.coerce.number().int().min(1).max(65535).default(3001),
+
+    host: z.string().default('0.0.0.0'),
+
+    jwtSecret: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
+
+    hmacSecret: z.string().min(32, 'HMAC_SECRET must be at least 32 characters'),
+
+    apiKeys: z
+      .string()
+      .default('')
+      .transform((raw) =>
+        raw
+          .split(',')
+          .map((k) => k.trim())
+          .filter(Boolean),
+      ),
+
+    corsOrigins: z
+      .string()
+      .default('http://localhost:3000')
+      .transform((raw) =>
+        raw
+          .split(',')
+          .map((o) => o.trim())
+          .filter(Boolean),
+      ),
+
+    databaseUrl: z.string().url('DATABASE_URL must be a valid URL').optional(),
+
+    redisUrl: z.string().url('REDIS_URL must be a valid URL').optional(),
+
+    logLevel: z.enum(['debug', 'info', 'warn', 'error', 'silent']).default('info'),
+
+    trustProxy: z
+      .string()
+      .optional()
+      .transform((val) => {
+        if (!val || val === 'false') return false;
+        if (val === 'true') return true;
+        return val; // CIDR string like '10.0.0.0/8'
+      }),
+
+    metricsBearerToken: z.string().min(16).optional(),
+  })
+  .superRefine((data, ctx) => {
+    // HMAC_SECRET must differ from JWT_SECRET to prevent key reuse
+    if (data.hmacSecret === data.jwtSecret) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['hmacSecret'],
+        message: 'HMAC_SECRET must be different from JWT_SECRET (key reuse is a security risk)',
+      });
+    }
+  });
+
+/** Load and validate configuration from environment variables. Throws on failure. */
 export function loadConfig(): ApiConfig {
-  const jwtSecret = process.env['JWT_SECRET'];
-  if (!jwtSecret) {
-    throw new Error('Missing required env var: JWT_SECRET');
-  }
-
-  const hmacSecret = process.env['HMAC_SECRET'] ?? jwtSecret;
-
-  const apiKeysRaw = process.env['API_KEYS'] ?? '';
-  const apiKeys = apiKeysRaw
-    .split(',')
-    .map((k) => k.trim())
-    .filter(Boolean);
-
-  const corsOriginsRaw = process.env['CORS_ORIGINS'] ?? 'http://localhost:3000';
-  const corsOrigins = corsOriginsRaw
-    .split(',')
-    .map((o) => o.trim())
-    .filter(Boolean);
-
-  return {
-    port: parseInt(process.env['PORT'] ?? '3001', 10),
-    host: process.env['HOST'] ?? '0.0.0.0',
-    jwtSecret,
-    hmacSecret,
-    apiKeys,
-    corsOrigins,
+  const raw = {
+    port: process.env['PORT'],
+    host: process.env['HOST'],
+    jwtSecret: process.env['JWT_SECRET'],
+    hmacSecret: process.env['HMAC_SECRET'] ?? process.env['JWT_SECRET'],
+    apiKeys: process.env['API_KEYS'],
+    corsOrigins: process.env['CORS_ORIGINS'],
     databaseUrl: process.env['DATABASE_URL'],
     redisUrl: process.env['REDIS_URL'],
-    logLevel: process.env['LOG_LEVEL'] ?? 'info',
-    trustProxy: (() => {
-      const val = process.env['TRUST_PROXY'];
-      if (!val || val === 'false') return false;
-      if (val === 'true') return true;
-      return val; // CIDR string like '10.0.0.0/8'
-    })(),
+    logLevel: process.env['LOG_LEVEL'],
+    trustProxy: process.env['TRUST_PROXY'],
+    metricsBearerToken: process.env['METRICS_BEARER_TOKEN'],
   };
+
+  const result = ApiConfigSchema.safeParse(raw);
+  if (!result.success) {
+    const messages = result.error.issues
+      .map((issue) => `  - ${issue.path.join('.')}: ${issue.message}`)
+      .join('\n');
+    throw new Error(`FHIRBridge configuration error:\n${messages}`);
+  }
+
+  return result.data;
 }
