@@ -20,7 +20,7 @@
     "clean": "rm -rf dist *.tsbuildinfo"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.80.0",
+    "@anthropic-ai/sdk": "^0.81.0",
     "@fhirbridge/types": "workspace:*",
     "csv-parse": "^6.2.1",
     "exceljs": "^4.4.0",
@@ -28,7 +28,7 @@
     "openai": "^6.32.0",
     "pdfkit": "^0.18.0",
     "stripe": "^20.4.1",
-    "uuid": "^13.0.0"
+    "uuid": "^14.0.0"
   },
   "devDependencies": {
     "@types/pdfkit": "^0.17.5",
