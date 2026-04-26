@@ -1,0 +1,43 @@
+{
+  "$schema": "https://github.com/tranhoangtu-it/FHIRBridge/blob/main/packages/types/src/connectors/mapping.schema.json",
+  "description": "Vietnamese hospital CSV with VneID-style identifiers and ICD-10 diagnosis codes. One row per encounter.",
+  "patientId": {
+    "column": "VNEID",
+    "system": "https://vneid.gov.vn/identifier"
+  },
+  "fields": {
+    "Patient.identifier[].value": "VNEID",
+    "Patient.name.family": "HoTen_Surname",
+    "Patient.name.given": "HoTen_Given",
+    "Patient.gender": {
+      "column": "GioiTinh",
+      "transform": "lowercase",
+      "valueMap": { "Nam": "male", "Nu": "female", "Khac": "other" }
+    },
+    "Patient.birthDate": {
+      "column": "NgaySinh",
+      "transform": "date",
+      "format": "DD/MM/YYYY"
+    },
+    "Patient.address.line": "DiaChi_Line",
+    "Patient.address.city": "DiaChi_TinhThanh",
+    "Patient.address.country": { "literal": "VN" },
+    "Encounter.period.start": {
+      "column": "NgayKham",
+      "transform": "datetime",
+      "format": "DD/MM/YYYY HH:mm"
+    },
+    "Encounter.class.code": {
+      "column": "LoaiKham",
+      "valueMap": { "NoiTru": "IMP", "NgoaiTru": "AMB" }
+    },
+    "Condition.code.coding[].system": { "literal": "http://hl7.org/fhir/sid/icd-10" },
+    "Condition.code.coding[].code": "ChanDoan_ICD10",
+    "Condition.code.text": "ChanDoan_MoTa",
+    "Observation.code.coding[].system": { "literal": "http://loinc.org" },
+    "Observation.code.coding[].code": "XetNghiem_LOINC",
+    "Observation.valueQuantity.value": "XetNghiem_KetQua",
+    "Observation.valueQuantity.unit": "XetNghiem_DonVi"
+  },
+  "resourceTypes": ["Patient", "Encounter", "Condition", "Observation"]
+}

@@ -1,22 +1,48 @@
 /**
- * App — router setup.
+ * App — router setup with code-split lazy pages.
  * '/'       → public LandingPage (no sidebar)
  * '/app/*'  → authenticated app shell with sidebar + header
+ *
+ * Each non-trivial page is React.lazy'd so the initial JS bundle stays small.
+ * The landing page is also lazy because most direct visitors stay on '/' and
+ * the app shell never loads for them.
  */
 
+import { lazy, Suspense, useState, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { useState, useEffect } from 'react';
 import { AppSidebar } from './components/layout/app-sidebar';
 import { AppHeader } from './components/layout/app-header';
 import { ErrorBoundary } from './components/shared/error-boundary';
-import { LandingPage } from './pages/landing-page';
-import { DashboardPage } from './pages/dashboard-page';
-import { ExportWizardPage } from './pages/export-wizard-page';
-import { ImportPage } from './pages/import-page';
-import { SummaryViewerPage } from './pages/summary-viewer-page';
-import { SettingsPage } from './pages/settings-page';
 import { healthApi } from './api/health-api';
 import { ROUTES } from './lib/constants';
+
+const LandingPage = lazy(() =>
+  import('./pages/landing-page').then((m) => ({ default: m.LandingPage })),
+);
+const DashboardPage = lazy(() =>
+  import('./pages/dashboard-page').then((m) => ({ default: m.DashboardPage })),
+);
+const ExportWizardPage = lazy(() =>
+  import('./pages/export-wizard-page').then((m) => ({ default: m.ExportWizardPage })),
+);
+const ImportPage = lazy(() =>
+  import('./pages/import-page').then((m) => ({ default: m.ImportPage })),
+);
+const SummaryViewerPage = lazy(() =>
+  import('./pages/summary-viewer-page').then((m) => ({ default: m.SummaryViewerPage })),
+);
+const SettingsPage = lazy(() =>
+  import('./pages/settings-page').then((m) => ({ default: m.SettingsPage })),
+);
+
+function PageFallback() {
+  return (
+    <div className="flex min-h-[40vh] items-center justify-center" role="status" aria-live="polite">
+      <div className="h-6 w-6 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
+      <span className="sr-only">Loading…</span>
+    </div>
+  );
+}
 
 function useHealthCheck() {
   const [healthOk, setHealthOk] = useState<boolean | undefined>(undefined);
@@ -52,14 +78,16 @@ function AppShell() {
         <AppHeader />
         <main className="flex-1 overflow-y-auto" id="main-content" tabIndex={-1}>
           <ErrorBoundary>
-            <Routes>
-              <Route path="dashboard" element={<DashboardPage />} />
-              <Route path="export" element={<ExportWizardPage />} />
-              <Route path="import" element={<ImportPage />} />
-              <Route path="summary/:id" element={<SummaryViewerPage />} />
-              <Route path="settings" element={<SettingsPage />} />
-              <Route path="*" element={<Navigate to={ROUTES.DASHBOARD} replace />} />
-            </Routes>
+            <Suspense fallback={<PageFallback />}>
+              <Routes>
+                <Route path="dashboard" element={<DashboardPage />} />
+                <Route path="export" element={<ExportWizardPage />} />
+                <Route path="import" element={<ImportPage />} />
+                <Route path="summary/:id" element={<SummaryViewerPage />} />
+                <Route path="settings" element={<SettingsPage />} />
+                <Route path="*" element={<Navigate to={ROUTES.DASHBOARD} replace />} />
+              </Routes>
+            </Suspense>
           </ErrorBoundary>
         </main>
       </div>
@@ -69,10 +97,12 @@ function AppShell() {
 
 export default function App() {
   return (
-    <Routes>
-      <Route path={ROUTES.LANDING} element={<LandingPage />} />
-      <Route path="/app/*" element={<AppShell />} />
-      <Route path="*" element={<Navigate to={ROUTES.LANDING} replace />} />
-    </Routes>
+    <Suspense fallback={<PageFallback />}>
+      <Routes>
+        <Route path={ROUTES.LANDING} element={<LandingPage />} />
+        <Route path="/app/*" element={<AppShell />} />
+        <Route path="*" element={<Navigate to={ROUTES.LANDING} replace />} />
+      </Routes>
+    </Suspense>
   );
 }
