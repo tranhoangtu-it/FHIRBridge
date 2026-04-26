@@ -1,11 +1,12 @@
 /**
  * Integration tests — Export routes.
  * Tests HTTP layer + business logic. No real FHIR endpoint needed.
+ * Self-host edition: no quota / tier — any authenticated user can export.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { createTestServer, paidUserJwt, freeUserJwt, makeJwt, bearerHeader } from './helpers.js';
+import { createTestServer, userJwt, makeJwt, bearerHeader } from './helpers.js';
 
 let server: FastifyInstance;
 
@@ -17,7 +18,6 @@ afterAll(async () => {
   await server.close();
 });
 
-/** Valid export body pointing at a (non-reachable) external endpoint */
 const VALID_EXPORT_BODY = {
   patientId: 'patient-123',
   connectorConfig: {
@@ -27,12 +27,12 @@ const VALID_EXPORT_BODY = {
 };
 
 describe('POST /api/v1/export — initiate export', () => {
-  it('returns 202 with exportId for paid user', async () => {
+  it('returns 202 with exportId for an authenticated user', async () => {
     const res = await server.inject({
       method: 'POST',
       url: '/api/v1/export',
       headers: {
-        authorization: bearerHeader(paidUserJwt()),
+        authorization: bearerHeader(userJwt('export-ok')),
         'content-type': 'application/json',
       },
       payload: VALID_EXPORT_BODY,
@@ -44,27 +44,12 @@ describe('POST /api/v1/export — initiate export', () => {
     expect(body.status).toBe('processing');
   });
 
-  it('returns 202 with exportId for free user (within quota)', async () => {
-    // Fresh user ID to avoid quota exhaustion from other tests
-    const freshFreeToken = makeJwt({ id: `export-free-${Date.now()}`, tier: 'free' });
-    const res = await server.inject({
-      method: 'POST',
-      url: '/api/v1/export',
-      headers: {
-        authorization: bearerHeader(freshFreeToken),
-        'content-type': 'application/json',
-      },
-      payload: VALID_EXPORT_BODY,
-    });
-    expect(res.statusCode).toBe(202);
-  });
-
   it('returns 400 when patientId is missing', async () => {
     const res = await server.inject({
       method: 'POST',
       url: '/api/v1/export',
       headers: {
-        authorization: bearerHeader(paidUserJwt()),
+        authorization: bearerHeader(userJwt('export-missing-pid')),
         'content-type': 'application/json',
       },
       payload: {
@@ -79,7 +64,7 @@ describe('POST /api/v1/export — initiate export', () => {
       method: 'POST',
       url: '/api/v1/export',
       headers: {
-        authorization: bearerHeader(paidUserJwt()),
+        authorization: bearerHeader(userJwt('export-missing-conn')),
         'content-type': 'application/json',
       },
       payload: { patientId: 'patient-123' },
@@ -88,13 +73,11 @@ describe('POST /api/v1/export — initiate export', () => {
   });
 
   it('accepts SSRF baseUrl but export eventually fails (not blocked at HTTP layer)', async () => {
-    // SSRF validation happens inside runExport (async), not at HTTP ingress.
-    // The endpoint accepts the job and returns 202; the record status becomes 'failed'.
     const res = await server.inject({
       method: 'POST',
       url: '/api/v1/export',
       headers: {
-        authorization: bearerHeader(paidUserJwt()),
+        authorization: bearerHeader(userJwt('export-ssrf')),
         'content-type': 'application/json',
       },
       payload: {
@@ -102,7 +85,6 @@ describe('POST /api/v1/export — initiate export', () => {
         connectorConfig: { type: 'fhir-endpoint', baseUrl: 'http://169.254.169.254/latest' },
       },
     });
-    // HTTP layer returns 202 — SSRF is caught async inside runExport
     expect(res.statusCode).toBe(202);
   });
 
@@ -118,9 +100,8 @@ describe('POST /api/v1/export — initiate export', () => {
 });
 
 describe('GET /api/v1/export/:id/status', () => {
-  it('returns status object for correct user', async () => {
-    const token = paidUserJwt();
-    // Start an export first
+  it('returns status object for the correct user', async () => {
+    const token = userJwt('export-status-ok');
     const postRes = await server.inject({
       method: 'POST',
       url: '/api/v1/export',
@@ -141,8 +122,8 @@ describe('GET /api/v1/export/:id/status', () => {
   });
 
   it('returns 404 when a different user requests the same export (IDOR protection)', async () => {
-    const ownerToken = makeJwt({ id: `owner-${Date.now()}`, tier: 'paid' });
-    const attackerToken = makeJwt({ id: `attacker-${Date.now()}`, tier: 'paid' });
+    const ownerToken = makeJwt({ id: `owner-${Date.now()}` });
+    const attackerToken = makeJwt({ id: `attacker-${Date.now()}` });
 
     const postRes = await server.inject({
       method: 'POST',
@@ -164,7 +145,7 @@ describe('GET /api/v1/export/:id/status', () => {
     const res = await server.inject({
       method: 'GET',
       url: '/api/v1/export/00000000-0000-0000-0000-000000000000/status',
-      headers: { authorization: bearerHeader(paidUserJwt()) },
+      headers: { authorization: bearerHeader(userJwt('export-status-404')) },
     });
     expect(res.statusCode).toBe(404);
   });

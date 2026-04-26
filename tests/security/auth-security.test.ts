@@ -10,12 +10,15 @@ import {
   bearerHeader,
   TEST_JWT_SECRET,
   makeJwt,
+  PROTECTED_PROBE_URL,
 } from '../integration/helpers.js';
 
 let server: FastifyInstance;
 
-/** A protected route that requires any valid auth */
-const PROTECTED = '/api/v1/billing/plans';
+const PROBE_PAYLOAD = {
+  type: 'fhir-endpoint',
+  baseUrl: 'https://hapi.fhir.org/baseR4',
+};
 
 beforeAll(async () => {
   server = await createTestServer();
@@ -33,29 +36,29 @@ describe('JWT — alg:none attack', () => {
   it('unsigned token (alg: none) is rejected with 401', async () => {
     const header = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url');
     const payload = Buffer.from(
-      JSON.stringify({ id: 'attacker', tier: 'paid', iat: Math.floor(Date.now() / 1000) }),
+      JSON.stringify({ id: 'attacker', iat: Math.floor(Date.now() / 1000) }),
     ).toString('base64url');
     const noneToken = `${header}.${payload}.`;
 
     const res = await server.inject({
-      method: 'GET',
-      url: PROTECTED,
-      headers: { authorization: bearerHeader(noneToken) },
+      method: 'POST',
+      url: PROTECTED_PROBE_URL,
+      headers: { authorization: bearerHeader(noneToken), 'content-type': 'application/json' },
+      payload: PROBE_PAYLOAD,
     });
     expect(res.statusCode).toBe(401);
   });
 
   it('empty signature with valid header/payload returns 401', async () => {
     const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
-    const payload = Buffer.from(JSON.stringify({ id: 'attacker', tier: 'paid' })).toString(
-      'base64url',
-    );
+    const payload = Buffer.from(JSON.stringify({ id: 'attacker' })).toString('base64url');
     const truncated = `${header}.${payload}.`;
 
     const res = await server.inject({
-      method: 'GET',
-      url: PROTECTED,
-      headers: { authorization: bearerHeader(truncated) },
+      method: 'POST',
+      url: PROTECTED_PROBE_URL,
+      headers: { authorization: bearerHeader(truncated), 'content-type': 'application/json' },
+      payload: PROBE_PAYLOAD,
     });
     expect(res.statusCode).toBe(401);
   });
@@ -65,32 +68,32 @@ describe('JWT — alg:none attack', () => {
 // JWT payload tampering
 // ---------------------------------------------------------------------------
 
-describe('JWT — tampered payload (tier escalation)', () => {
-  it('free-tier token with manually patched tier=paid is rejected', async () => {
-    // Sign a legit free token then swap the payload bytes before sending
-    const legitToken = makeJwt({ id: 'user-escalate', tier: 'free' });
+describe('JWT — tampered payload', () => {
+  it('legit token with manually swapped payload is rejected', async () => {
+    const legitToken = makeJwt({ id: 'user-original' });
     const parts = legitToken.split('.');
 
-    // Replace payload with paid-tier payload (different signature won't match)
     const tamperedPayload = Buffer.from(
-      JSON.stringify({ id: 'user-escalate', tier: 'paid', iat: Math.floor(Date.now() / 1000) }),
+      JSON.stringify({ id: 'user-impersonated', iat: Math.floor(Date.now() / 1000) }),
     ).toString('base64url');
     const tampered = `${parts[0]}.${tamperedPayload}.${parts[2]}`;
 
     const res = await server.inject({
-      method: 'GET',
-      url: PROTECTED,
-      headers: { authorization: bearerHeader(tampered) },
+      method: 'POST',
+      url: PROTECTED_PROBE_URL,
+      headers: { authorization: bearerHeader(tampered), 'content-type': 'application/json' },
+      payload: PROBE_PAYLOAD,
     });
     expect(res.statusCode).toBe(401);
   });
 
   it('token re-signed with wrong key is rejected', async () => {
-    const wrongKeyToken = makeJwt({ id: 'user-x', tier: 'paid' }, 'wrong-key-not-the-real-secret');
+    const wrongKeyToken = makeJwt({ id: 'user-x' }, 'wrong-key-not-the-real-secret');
     const res = await server.inject({
-      method: 'GET',
-      url: PROTECTED,
-      headers: { authorization: bearerHeader(wrongKeyToken) },
+      method: 'POST',
+      url: PROTECTED_PROBE_URL,
+      headers: { authorization: bearerHeader(wrongKeyToken), 'content-type': 'application/json' },
+      payload: PROBE_PAYLOAD,
     });
     expect(res.statusCode).toBe(401);
   });
@@ -98,9 +101,8 @@ describe('JWT — tampered payload (tier escalation)', () => {
   it('correct secret but wrong algorithm hint (RS256 header, HS256 signed) is rejected', async () => {
     const header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url');
     const payload = Buffer.from(
-      JSON.stringify({ id: 'x', tier: 'paid', iat: Math.floor(Date.now() / 1000) }),
+      JSON.stringify({ id: 'x', iat: Math.floor(Date.now() / 1000) }),
     ).toString('base64url');
-    // Signature is computed via HS256 but header says RS256 — mismatch
     const { createHmac } = await import('node:crypto');
     const sig = createHmac('sha256', TEST_JWT_SECRET)
       .update(`${header}.${payload}`)
@@ -108,9 +110,10 @@ describe('JWT — tampered payload (tier escalation)', () => {
     const mismatch = `${header}.${payload}.${sig}`;
 
     const res = await server.inject({
-      method: 'GET',
-      url: PROTECTED,
-      headers: { authorization: bearerHeader(mismatch) },
+      method: 'POST',
+      url: PROTECTED_PROBE_URL,
+      headers: { authorization: bearerHeader(mismatch), 'content-type': 'application/json' },
+      payload: PROBE_PAYLOAD,
     });
     expect(res.statusCode).toBe(401);
   });
@@ -121,18 +124,16 @@ describe('JWT — tampered payload (tier escalation)', () => {
 // ---------------------------------------------------------------------------
 
 describe('API key — constant-time comparison', () => {
-  /**
-   * Measures the median response time (ms) across `runs` requests.
-   * We compare a valid-prefix key vs a completely random key.
-   * The difference should be small (< 50ms) if comparison is constant-time.
-   * This is a best-effort signal — true constant-time is enforced by the Set.has()
-   * implementation which doesn't short-circuit on prefix match.
-   */
   async function measureMedianMs(key: string, runs = 10): Promise<number> {
     const times: number[] = [];
     for (let i = 0; i < runs; i++) {
       const start = performance.now();
-      await server.inject({ method: 'GET', url: PROTECTED, headers: { 'x-api-key': key } });
+      await server.inject({
+        method: 'POST',
+        url: PROTECTED_PROBE_URL,
+        headers: { 'x-api-key': key, 'content-type': 'application/json' },
+        payload: PROBE_PAYLOAD,
+      });
       times.push(performance.now() - start);
     }
     times.sort((a, b) => a - b);
@@ -140,7 +141,6 @@ describe('API key — constant-time comparison', () => {
   }
 
   it('response time for valid-prefix key and random key are similar (within 50ms)', async () => {
-    // "test-key-" is a valid prefix of a real key ("test-key-free" / "test-key-paid")
     const validPrefixKey = 'test-key-xxxxxxxxxxxxxxxxx';
     const randomKey = 'zzzzzzzzzzzzzzzzzzzzzzzzzzzz';
 
@@ -150,7 +150,6 @@ describe('API key — constant-time comparison', () => {
     ]);
 
     const diff = Math.abs(medianPrefix - medianRandom);
-    // 50ms is generous for a local server — the real diff should be <1ms
     expect(diff).toBeLessThan(50);
   });
 });
@@ -169,11 +168,8 @@ describe('CORS — malicious origin not reflected', () => {
     });
 
     const acao = res.headers['access-control-allow-origin'];
-    // Must not echo back the malicious origin
     if (acao !== undefined) {
       expect(acao).not.toBe(maliciousOrigin);
-      // Wildcard is acceptable only on public endpoints with no credentials
-      // For a JWT-protected API, wildcard+credentials is insecure but health is public
     }
   });
 

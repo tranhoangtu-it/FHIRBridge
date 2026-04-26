@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { createTestServer, freeUserJwt, bearerHeader } from '../integration/helpers.js';
+import { createTestServer } from '../integration/helpers.js';
 
 describe('API benchmarks', () => {
   let server: FastifyInstance;
@@ -19,7 +19,6 @@ describe('API benchmarks', () => {
     await server.close();
   });
 
-  // Collect N timings via inject and return sorted array
   async function timings(count: number, url: string, headers?: Record<string, string>) {
     const times: number[] = [];
     for (let i = 0; i < count; i++) {
@@ -37,15 +36,6 @@ describe('API benchmarks', () => {
     expect(p95).toBeLessThan(50);
   });
 
-  it('GET /billing/plans p95 < 50ms', async () => {
-    const jwt = freeUserJwt();
-    const t = await timings(100, '/api/v1/billing/plans', {
-      authorization: bearerHeader(jwt),
-    });
-    const p95 = t[Math.floor(t.length * 0.95)]!;
-    expect(p95).toBeLessThan(50);
-  });
-
   it('handles 100 sequential requests at >= 100 req/s', async () => {
     const start = performance.now();
     for (let i = 0; i < 100; i++) {
@@ -57,7 +47,6 @@ describe('API benchmarks', () => {
   });
 
   it('RSS delta < 200 MB after 1000 requests', async () => {
-    // Force GC if available (Node --expose-gc)
     if (typeof global.gc === 'function') global.gc();
     const rssBefore = process.memoryUsage().rss;
 

@@ -84,7 +84,7 @@ describe('Auth plugin H-1 — constant-time API key', () => {
       headers: { 'X-API-Key': VALID_API_KEY },
     });
     expect(res.statusCode).toBe(200);
-    const body = res.json() as { user: { id: string; tier: string } };
+    const body = res.json() as { user: { id: string } };
 
     // Tính SHA-256 expected
     const expectedHash = createHash('sha256')

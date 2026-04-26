@@ -17,12 +17,15 @@ export const TEST_CONFIG: ApiConfig = {
   host: '0.0.0.0',
   jwtSecret: TEST_JWT_SECRET,
   hmacSecret: TEST_HMAC_SECRET,
-  apiKeys: ['test-key-free', 'test-key-paid'],
+  apiKeys: ['test-key-1', 'test-key-2'],
   corsOrigins: ['http://localhost:4173'],
   logLevel: 'silent',
   trustProxy: false,
   // No databaseUrl / redisUrl — uses in-memory fallbacks
 };
+
+/** Generic protected route used by integration / security tests as a probe target. */
+export const PROTECTED_PROBE_URL = '/api/v1/connectors/test';
 
 /** Create and return a ready Fastify instance using test config */
 export async function createTestServer(): Promise<FastifyInstance> {
@@ -40,14 +43,9 @@ export function makeJwt(
   return sign(payload, secret, options as Parameters<typeof sign>[2]);
 }
 
-/** JWT for a free-tier user */
-export function freeUserJwt(): string {
-  return makeJwt({ id: 'user-free', tier: 'free' });
-}
-
-/** JWT for a paid-tier user */
-export function paidUserJwt(): string {
-  return makeJwt({ id: 'user-paid', tier: 'paid' });
+/** JWT for a generic test user */
+export function userJwt(id = 'user-test'): string {
+  return makeJwt({ id });
 }
 
 /** Build Authorization header value */
