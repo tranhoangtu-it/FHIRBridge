@@ -13,7 +13,8 @@ updates:
           - '@fastify/*'
           - 'ioredis'
           - 'pg'
-          - 'stripe'
+          - '@anthropic-ai/sdk'
+          - 'openai'
         update-types:
           - 'minor'
           - 'patch'
