@@ -53,5 +53,12 @@
       "prettier --write"
     ]
   },
-  "packageManager": "pnpm@9.11.0"
+  "packageManager": "pnpm@9.11.0",
+  "pnpm": {
+    "overrides": {
+      "fast-jwt": "^6.2.2",
+      "picomatch@<2.3.2": "2.3.2",
+      "picomatch@>=4 <4.0.4": "4.0.4"
+    }
+  }
 }
