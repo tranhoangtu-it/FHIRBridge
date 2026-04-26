@@ -1,0 +1,41 @@
+{
+  "$schema": "https://github.com/tranhoangtu-it/FHIRBridge/blob/main/packages/types/src/connectors/mapping.schema.json",
+  "description": "Japanese small-clinic Excel workbook. Two sheets: 患者 (Patients) and 受診 (Encounters). Kanji column headers; ICD-10 diagnosis codes.",
+  "sheet": {
+    "Patient": "患者",
+    "Encounter": "受診"
+  },
+  "patientId": {
+    "column": "患者番号",
+    "system": "urn:oid:1.2.392.200119.6.301"
+  },
+  "fields": {
+    "Patient.identifier[].value": "患者番号",
+    "Patient.name.family": "姓",
+    "Patient.name.given": "名",
+    "Patient.gender": {
+      "column": "性別",
+      "valueMap": { "男": "male", "女": "female", "その他": "other", "不明": "unknown" }
+    },
+    "Patient.birthDate": {
+      "column": "生年月日",
+      "transform": "date",
+      "format": "YYYY-MM-DD"
+    },
+    "Patient.address.line": "住所",
+    "Patient.address.country": { "literal": "JP" },
+    "Encounter.period.start": {
+      "column": "受診日時",
+      "transform": "datetime",
+      "format": "YYYY-MM-DD HH:mm"
+    },
+    "Encounter.class.code": {
+      "column": "受診区分",
+      "valueMap": { "外来": "AMB", "入院": "IMP" }
+    },
+    "Condition.code.coding[].system": { "literal": "http://hl7.org/fhir/sid/icd-10" },
+    "Condition.code.coding[].code": "診断コード",
+    "Condition.code.text": "診断名"
+  },
+  "resourceTypes": ["Patient", "Encounter", "Condition"]
+}

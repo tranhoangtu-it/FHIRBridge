@@ -43,15 +43,26 @@ describe('GET /api/v1/health', () => {
     expect(body.checks).toMatchObject({ server: 'ok', database: 'ok', redis: 'ok' });
   });
 
-  it('returns degraded when db is not configured', async () => {
+  it('reports db/redis as "disabled" (not "error") when not configured', async () => {
     const app2 = Fastify({ logger: false });
-    const degradedConfig: ApiConfig = { ...mockConfig, databaseUrl: undefined };
-    await app2.register(healthRoutes, { config: degradedConfig });
+    const noInfraConfig: ApiConfig = {
+      ...mockConfig,
+      databaseUrl: undefined,
+      redisUrl: undefined,
+    };
+    await app2.register(healthRoutes, { config: noInfraConfig });
     await app2.ready();
 
     const response = await app2.inject({ method: 'GET', url: '/api/v1/health' });
     expect(response.statusCode).toBe(200);
-    expect(response.json().status).toBe('degraded');
+    const body = response.json();
+    // Self-host with no DB/Redis is a fully supported posture, not a degraded state
+    expect(body.status).toBe('ok');
+    expect(body.checks).toMatchObject({
+      server: 'ok',
+      database: 'disabled',
+      redis: 'disabled',
+    });
     await app2.close();
   });
 

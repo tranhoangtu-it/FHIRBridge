@@ -48,28 +48,32 @@ export async function healthRoutes(
   opts: HealthRoutesOpts,
 ): Promise<void> {
   fastify.get('/api/v1/health', { schema: healthSchema }, async (_request, reply) => {
-    const checks: Record<string, 'ok' | 'error'> = {
+    const checks: Record<string, 'ok' | 'error' | 'disabled'> = {
       server: 'ok',
     };
 
-    // Database probe: prefer live sink health flag, fall back to URL presence
+    // Database probe: distinguish "not configured" (disabled) from "configured but down" (error)
     if (opts.postgresAuditSink) {
       checks['database'] = opts.postgresAuditSink.isHealthy() ? 'ok' : 'error';
+    } else if (opts.config.databaseUrl) {
+      checks['database'] = 'ok';
     } else {
-      checks['database'] = opts.config.databaseUrl ? 'ok' : 'error';
+      checks['database'] = 'disabled';
     }
 
-    // Redis probe: prefer live store health flag, fall back to URL presence
+    // Redis probe: same disabled vs error distinction
     if (opts.redisStore) {
       checks['redis'] = opts.redisStore.isHealthy() ? 'ok' : 'error';
+    } else if (opts.config.redisUrl) {
+      checks['redis'] = 'ok';
     } else {
-      checks['redis'] = opts.config.redisUrl ? 'ok' : 'error';
+      checks['redis'] = 'disabled';
     }
 
-    const allOk = Object.values(checks).every((v) => v === 'ok');
-
+    // Status: "ok" if no real errors. "disabled" deps don't degrade the service.
+    const hasError = Object.values(checks).some((v) => v === 'error');
     return reply.status(200).send({
-      status: allOk ? 'ok' : 'degraded',
+      status: hasError ? 'degraded' : 'ok',
       version: API_VERSION,
       timestamp: new Date().toISOString(),
       checks,

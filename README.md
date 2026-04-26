@@ -55,7 +55,65 @@ fhirbridge/
 - pnpm >= 9
 - (Optional) Docker + Docker Compose — only needed if you want persistent audit logs (Postgres) or distributed rate limiting (Redis). The server runs fine with both off, falling back to Console-audit + in-memory rate limit.
 
-## Quickstart
+## Quickstart — 2-minute Docker
+
+The fastest way to try FHIRBridge is the pre-built image. The API runs with no Postgres / Redis — audit goes to stdout, rate limit is in-memory.
+
+```bash
+# Generate two secrets (each ≥ 32 chars, must differ)
+JWT_SECRET=$(openssl rand -hex 48)
+HMAC_SECRET=$(openssl rand -hex 48)
+
+# Pull and run
+docker run --rm \
+  -e JWT_SECRET=$JWT_SECRET \
+  -e HMAC_SECRET=$HMAC_SECRET \
+  -p 3001:3001 \
+  ghcr.io/tranhoangtu-it/fhirbridge-api:latest
+
+# In another terminal:
+curl http://localhost:3001/api/v1/health
+# → {"status":"ok","version":"0.1.0",...,"checks":{"server":"ok","database":"disabled","redis":"disabled"}}
+```
+
+To run the web dashboard alongside, build it once and serve `packages/web/dist/` from any static host (nginx / Caddy / S3+CloudFront / Cloudflare Pages). It points at `VITE_API_BASE_URL`.
+
+For full Postgres + Redis posture, see [Self-host deployment](#self-host-deployment).
+
+## 5-minute walkthrough — first export
+
+This walkthrough hits the public HAPI FHIR sandbox so you can verify everything end-to-end without an HIS handy.
+
+```bash
+# 1. Issue a JWT for yourself (uses the same JWT_SECRET as the server)
+JWT=$(node -e "const j=require('jsonwebtoken');console.log(j.sign({sub:'demo'},process.env.JWT_SECRET))")
+
+# 2. Probe the public HAPI FHIR endpoint
+curl -X POST http://localhost:3001/api/v1/connectors/test \
+  -H "Authorization: Bearer $JWT" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"fhir-endpoint","baseUrl":"https://hapi.fhir.org/baseR4"}'
+
+# 3. Kick off an export of patient #1
+EXPORT_ID=$(curl -s -X POST http://localhost:3001/api/v1/export \
+  -H "Authorization: Bearer $JWT" -H "Content-Type: application/json" \
+  -d '{"patientId":"1","connectorConfig":{"type":"fhir-endpoint","baseUrl":"https://hapi.fhir.org/baseR4"}}' \
+  | jq -r .exportId)
+echo "Export id: $EXPORT_ID"
+
+# 4. Poll until complete
+curl -s http://localhost:3001/api/v1/export/$EXPORT_ID/status -H "Authorization: Bearer $JWT" | jq
+
+# 5. Download as NDJSON
+curl -s "http://localhost:3001/api/v1/export/$EXPORT_ID/download?format=ndjson" \
+  -H "Authorization: Bearer $JWT" \
+  -o patient-bundle.ndjson
+wc -l patient-bundle.ndjson
+```
+
+For CSV / Excel imports, drop in one of the [examples/column-mappings/](examples/column-mappings/) files — they cover Vietnamese, Japanese, and generic HL7-flavored exports.
+
+## Build from source
 
 ```bash
 # 1. Clone and install

@@ -1,0 +1,39 @@
+{
+  "$schema": "https://github.com/tranhoangtu-it/FHIRBridge/blob/main/packages/types/src/connectors/mapping.schema.json",
+  "description": "Generic HL7-flavored CSV with MRN / DOB / ICD-10 / LOINC columns. Most US hospital export tools default to a layout near this.",
+  "patientId": {
+    "column": "MRN",
+    "system": "urn:oid:2.16.840.1.113883.19.5"
+  },
+  "fields": {
+    "Patient.identifier[].value": "MRN",
+    "Patient.name.family": "LAST_NAME",
+    "Patient.name.given": "FIRST_NAME",
+    "Patient.gender": {
+      "column": "GENDER",
+      "transform": "lowercase",
+      "valueMap": { "M": "male", "F": "female", "O": "other", "U": "unknown" }
+    },
+    "Patient.birthDate": {
+      "column": "DOB",
+      "transform": "date",
+      "format": "YYYY-MM-DD"
+    },
+    "Patient.telecom[].system": { "literal": "phone" },
+    "Patient.telecom[].value": "PHONE",
+    "Encounter.period.start": {
+      "column": "VISIT_DATE",
+      "transform": "datetime",
+      "format": "YYYY-MM-DDTHH:mm:ssZ"
+    },
+    "Encounter.class.code": "VISIT_CLASS",
+    "Condition.code.coding[].system": { "literal": "http://hl7.org/fhir/sid/icd-10-cm" },
+    "Condition.code.coding[].code": "ICD10",
+    "Condition.code.text": "DIAGNOSIS_TEXT",
+    "Observation.code.coding[].system": { "literal": "http://loinc.org" },
+    "Observation.code.coding[].code": "LOINC",
+    "Observation.valueQuantity.value": "RESULT_VALUE",
+    "Observation.valueQuantity.unit": "RESULT_UNIT"
+  },
+  "resourceTypes": ["Patient", "Encounter", "Condition", "Observation"]
+}
