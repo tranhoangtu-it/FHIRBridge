@@ -6,9 +6,6 @@
 
 import { z } from 'zod';
 
-/** User tier for rate limiting */
-export type UserTier = 'free' | 'paid';
-
 /** Typed API server configuration — inferred from Zod schema */
 export type ApiConfig = z.infer<typeof ApiConfigSchema>;
 

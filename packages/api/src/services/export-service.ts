@@ -3,7 +3,7 @@
  * Supports Redis-backed store (optional) with in-memory fallback.
  * No PHI in service-level logs.
  *
- * C-6: Bổ sung streamExport() cho NDJSON streaming trực tiếp.
+ * C-6: streamExport() cho NDJSON streaming trực tiếp.
  * Memory-bounded — không gom resource array, stream-through only.
  */
 
@@ -17,7 +17,6 @@ import {
 } from '@fhirbridge/core';
 import type { Bundle, ConnectorConfig, Resource } from '@fhirbridge/types';
 import type { IRedisStore } from './redis-store.js';
-import type { WebhookDispatcher, WebhookEvent } from './webhook-dispatcher.js';
 
 export interface ExportRequest {
   patientId: string;
@@ -69,8 +68,6 @@ export interface ExportServiceDeps {
   redis?: IRedisStore;
   /** Optional logger; defaults to console.warn/error when absent */
   logger?: { warn(msg: string): void; error(msg: string): void };
-  /** Optional webhook dispatcher — emit export.completed / export.failed events */
-  webhookDispatcher?: WebhookDispatcher;
 }
 
 export class ExportService {
@@ -78,7 +75,6 @@ export class ExportService {
   private readonly memStore = new Map<string, ExportRecord>();
   private readonly redis: IRedisStore | null;
   private readonly logger: { warn(msg: string): void; error(msg: string): void };
-  private readonly webhookDispatcher: WebhookDispatcher | null;
 
   /**
    * @param optsOrRedis - Either an ExportServiceDeps object (preferred DI form)
@@ -88,23 +84,18 @@ export class ExportService {
     if (!optsOrRedis) {
       this.redis = null;
       this.logger = console;
-      this.webhookDispatcher = null;
     } else if ('set' in optsOrRedis && 'get' in optsOrRedis) {
-      // Backward-compat: bare IRedisStore passed directly
       this.redis = optsOrRedis as IRedisStore;
       this.logger = console;
-      this.webhookDispatcher = null;
     } else {
       const deps = optsOrRedis as ExportServiceDeps;
       this.redis = deps.redis ?? null;
       this.logger = deps.logger ?? console;
-      this.webhookDispatcher = deps.webhookDispatcher ?? null;
     }
   }
 
   private async storeRecord(exportId: string, record: ExportRecord): Promise<void> {
     if (this.redis) {
-      // Don't store large bundles in Redis
       const serialized = JSON.stringify(record);
       if (serialized.length > MAX_REDIS_BYTES) {
         this.logger.warn(`[ExportService] bundle for ${exportId} exceeds 5 MB, keeping in-memory`);
@@ -122,7 +113,6 @@ export class ExportService {
       const fromRedis = await this.redis.get<ExportRecord>(exportId);
       if (fromRedis) return fromRedis;
     }
-    // Also check in-memory (large bundles or Redis-miss fallback)
     return this.memStore.get(exportId);
   }
 
@@ -155,9 +145,7 @@ export class ExportService {
   /** Internal: run the full export pipeline */
   private async runExport(exportId: string, request: ExportRequest): Promise<void> {
     const record = (await this.loadRecord(exportId))!;
-    const startTime = record.createdAt;
     try {
-      // SSRF protection: validate baseUrl before connecting
       if ('baseUrl' in request.connectorConfig) {
         const ssrfResult = validateBaseUrl(request.connectorConfig.baseUrl as string);
         if (!ssrfResult.ok) {
@@ -184,45 +172,10 @@ export class ExportService {
       record.resourceCount = bundle.entry?.length ?? 0;
       record.status = 'complete';
       await this.storeRecord(exportId, record);
-
-      // Emit export.completed webhook event — fire-and-forget
-      if (this.webhookDispatcher) {
-        const event: WebhookEvent = {
-          id: `evt_${randomUUID()}`,
-          type: 'export.completed',
-          created: Math.floor(Date.now() / 1000),
-          api_version: 'v1',
-          data: {
-            export_id: exportId,
-            user_id_hash: hashUserId(record.userId),
-            resource_count: record.resourceCount,
-            duration_ms: Date.now() - startTime,
-            download_url: `/api/v1/export/${exportId}/download`,
-          },
-        };
-        void this.webhookDispatcher.dispatch(event, record.userId);
-      }
     } catch (err) {
       record.status = 'failed';
       record.error = err instanceof Error ? err.message : 'Export failed';
       await this.storeRecord(exportId, record);
-
-      // Emit export.failed webhook event — fire-and-forget
-      if (this.webhookDispatcher) {
-        const event: WebhookEvent = {
-          id: `evt_${randomUUID()}`,
-          type: 'export.failed',
-          created: Math.floor(Date.now() / 1000),
-          api_version: 'v1',
-          data: {
-            export_id: exportId,
-            user_id_hash: hashUserId(record.userId),
-            error: record.error ?? 'Export failed',
-            duration_ms: Date.now() - startTime,
-          },
-        };
-        void this.webhookDispatcher.dispatch(event, record.userId);
-      }
     }
   }
 
@@ -231,10 +184,6 @@ export class ExportService {
    *
    * Memory invariant: không gom resource array vào memory.
    * Mỗi resource được serialize thành NDJSON line và write ngay đến reply.raw.
-   *
-   * @param request - Fastify request (dùng để lấy authUser và request context)
-   * @param reply - Fastify reply (dùng reply.raw để write streaming)
-   * @param opts - Stream options: patientId, connectorConfig, userId
    */
   async streamExport(
     request: FastifyRequest,
@@ -256,7 +205,6 @@ export class ExportService {
       return;
     }
 
-    // SSRF protection: validate baseUrl trước khi connect
     if ('baseUrl' in connectorConfig) {
       const ssrfResult = validateBaseUrl(connectorConfig.baseUrl as string);
       if (!ssrfResult.ok) {
@@ -269,21 +217,17 @@ export class ExportService {
       }
     }
 
-    // Tạo AbortController để dừng stream khi client ngắt kết nối
     const abortController = new AbortController();
     const { signal } = abortController;
 
-    // Lắng nghe sự kiện 'close' của raw response — client disconnect hoặc connection reset
     const onClose = (): void => {
       abortController.abort();
     };
     reply.raw.on('close', onClose);
 
-    // Set streaming response headers
     reply.raw.setHeader('Content-Type', 'application/fhir+ndjson');
     reply.raw.setHeader('Transfer-Encoding', 'chunked');
     reply.raw.setHeader('Content-Disposition', 'attachment; filename=patient-export.ndjson');
-    // Tắt Fastify response serialization — dùng reply.raw.write() trực tiếp
     reply.hijack();
 
     const connector = new FhirEndpointConnector();
@@ -291,15 +235,10 @@ export class ExportService {
     try {
       await connector.connect(connectorConfig);
 
-      // Stream từng resource qua connector → serialize → write
-      // Không dùng TransformPipeline.pipe() (yields Bundle batches) mà iterate trực tiếp
-      // để tránh BundleBuilder.entries[] buffer — memory-bounded per resource
       for await (const rawRecord of connector.fetchPatientData(patientId)) {
-        // Kiểm tra abort signal (client disconnect)
         if (signal.aborted) break;
 
         if (++resourceCount > MAX_RESOURCES) {
-          // Ghi OperationOutcome lỗi vào stream rồi đóng
           const outcome =
             JSON.stringify({
               resourceType: 'OperationOutcome',
@@ -315,24 +254,19 @@ export class ExportService {
           break;
         }
 
-        // Serialize resource thành NDJSON line — không buffer array
         const resource = rawRecord.data as unknown as Resource;
         const line = serializeResourceAsNdjsonLine(resource);
 
-        // Backpressure: await drain trước khi write tiếp
         const drained = await writeChunk(reply.raw, line);
         if (!drained) {
-          // Đợi drain event để tránh memory buildup
           await waitForDrain(reply.raw);
         }
       }
 
       await connector.disconnect();
     } catch (err) {
-      // Lỗi mid-stream: ghi OperationOutcome vào cuối stream
       if (!signal.aborted) {
         const errorMessage = err instanceof Error ? err.message : 'Export failed';
-        // Không log PHI — chỉ log error message không chứa patient data
         this.logger.error(`[ExportService] streamExport error (no PHI): ${errorMessage}`);
 
         const outcome =
@@ -354,13 +288,10 @@ export class ExportService {
         }
       }
     } finally {
-      // Cleanup event listener để tránh memory leak
       reply.raw.removeListener('close', onClose);
 
-      // Audit log: emit resource count + duration (no PHI)
       const duration = Date.now() - startTime;
       const userIdHash = hashUserId(userId);
-      // Log không đồng bộ — không block stream close
       process.nextTick(() => {
         const line = JSON.stringify({
           audit: true,
@@ -374,7 +305,6 @@ export class ExportService {
         process.stdout.write(line + '\n');
       });
 
-      // Đóng response stream
       reply.raw.end();
     }
   }
@@ -389,17 +319,11 @@ function writeChunk(stream: NodeJS.WritableStream, data: string): Promise<boolea
   return new Promise<boolean>((resolve, reject) => {
     const canContinue = stream.write(data, (err) => {
       if (err) reject(err);
-      // Resolve được gọi sau write callback khi không dùng await trực tiếp
     });
-    // Resolve ngay với backpressure signal
     resolve(canContinue);
   });
 }
 
-/**
- * Chờ 'drain' event trước khi tiếp tục write.
- * Dùng khi writeChunk() trả về false (buffer đầy).
- */
 function waitForDrain(stream: NodeJS.WritableStream): Promise<void> {
   return new Promise<void>((resolve) => {
     stream.once('drain', resolve);

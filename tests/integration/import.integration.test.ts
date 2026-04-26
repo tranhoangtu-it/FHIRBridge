@@ -5,7 +5,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { createTestServer, paidUserJwt, bearerHeader } from './helpers.js';
+import { createTestServer, userJwt, bearerHeader } from './helpers.js';
 
 let server: FastifyInstance;
 
@@ -23,7 +23,7 @@ describe('POST /api/v1/connectors/test', () => {
       method: 'POST',
       url: '/api/v1/connectors/test',
       headers: {
-        authorization: bearerHeader(paidUserJwt()),
+        authorization: bearerHeader(userJwt()),
         'content-type': 'application/json',
       },
       payload: {
@@ -43,7 +43,7 @@ describe('POST /api/v1/connectors/test', () => {
       method: 'POST',
       url: '/api/v1/connectors/test',
       headers: {
-        authorization: bearerHeader(paidUserJwt()),
+        authorization: bearerHeader(userJwt()),
         'content-type': 'application/json',
       },
       payload: {
@@ -62,7 +62,7 @@ describe('POST /api/v1/connectors/test', () => {
       method: 'POST',
       url: '/api/v1/connectors/test',
       headers: {
-        authorization: bearerHeader(paidUserJwt()),
+        authorization: bearerHeader(userJwt()),
         'content-type': 'application/json',
       },
       payload: {
@@ -81,7 +81,7 @@ describe('POST /api/v1/connectors/test', () => {
       method: 'POST',
       url: '/api/v1/connectors/test',
       headers: {
-        authorization: bearerHeader(paidUserJwt()),
+        authorization: bearerHeader(userJwt()),
         'content-type': 'application/json',
       },
       payload: {
@@ -100,7 +100,7 @@ describe('POST /api/v1/connectors/test', () => {
       method: 'POST',
       url: '/api/v1/connectors/test',
       headers: {
-        authorization: bearerHeader(paidUserJwt()),
+        authorization: bearerHeader(userJwt()),
         'content-type': 'application/json',
       },
       payload: {
@@ -128,7 +128,7 @@ describe('POST /api/v1/connectors/import', () => {
       method: 'POST',
       url: '/api/v1/connectors/import',
       headers: {
-        authorization: bearerHeader(paidUserJwt()),
+        authorization: bearerHeader(userJwt()),
         'content-type': 'application/json',
       },
       payload: { data: 'not-multipart' },

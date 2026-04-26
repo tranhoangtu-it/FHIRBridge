@@ -27,7 +27,6 @@
     "fhir-kit-client": "^1.9.2",
     "openai": "^6.32.0",
     "pdfkit": "^0.18.0",
-    "stripe": "^20.4.1",
     "uuid": "^14.0.0"
   },
   "devDependencies": {

@@ -54,7 +54,7 @@ describe('Auth plugin — API key', () => {
     expect(response.statusCode).toBe(200);
     const body = response.json();
     expect(body.user).toBeDefined();
-    expect(body.user.tier).toBe('paid');
+    expect(body.user.id).toMatch(/^apikey:[0-9a-f]{16}$/);
   });
 
   it('rejects requests with invalid API key', async () => {
@@ -69,8 +69,7 @@ describe('Auth plugin — API key', () => {
 
 describe('Auth plugin — JWT', () => {
   it('allows requests with valid JWT', async () => {
-    // Sign a valid token using the @fastify/jwt plugin methods
-    const token = app.jwt.sign({ sub: 'user-123', tier: 'paid' });
+    const token = app.jwt.sign({ sub: 'user-123' });
     const response = await app.inject({
       method: 'GET',
       url: '/api/v1/protected',
@@ -78,7 +77,6 @@ describe('Auth plugin — JWT', () => {
     });
     expect(response.statusCode).toBe(200);
     expect(response.json().user.id).toBe('user-123');
-    expect(response.json().user.tier).toBe('paid');
   });
 
   it('rejects requests with invalid JWT', async () => {
@@ -88,17 +86,6 @@ describe('Auth plugin — JWT', () => {
       headers: { Authorization: 'Bearer invalid.jwt.token' },
     });
     expect(response.statusCode).toBe(401);
-  });
-
-  it('assigns free tier when tier not in JWT', async () => {
-    const token = app.jwt.sign({ sub: 'user-free' });
-    const response = await app.inject({
-      method: 'GET',
-      url: '/api/v1/protected',
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    expect(response.statusCode).toBe(200);
-    expect(response.json().user.tier).toBe('free');
   });
 });
 

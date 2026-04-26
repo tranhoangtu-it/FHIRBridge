@@ -5,7 +5,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { createTestServer, paidUserJwt, bearerHeader } from '../integration/helpers.js';
+import { createTestServer, userJwt, bearerHeader } from '../integration/helpers.js';
 
 let server: FastifyInstance;
 
@@ -30,7 +30,7 @@ function buildMultipart(boundary: string, filename: string, content: Buffer | st
   return Buffer.from(body, 'binary');
 }
 
-const AUTH_HEADER = bearerHeader(paidUserJwt());
+const AUTH_HEADER = bearerHeader(userJwt());
 const IMPORT_URL = '/api/v1/connectors/import';
 
 // Minimal valid CSV content

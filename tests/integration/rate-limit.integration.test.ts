@@ -1,24 +1,38 @@
 /**
  * Integration tests — Rate limiting.
- * Free tier: 10 req/min. 11th request must get 429.
+ * Single global budget configured via RATE_LIMIT_PER_MINUTE (test override = 10).
  * Uses in-memory rate limiter (no Redis in test config).
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { createTestServer, makeJwt, bearerHeader } from './helpers.js';
+import { createServer } from '../../packages/api/src/server.js';
+import { makeJwt, bearerHeader, TEST_CONFIG, PROTECTED_PROBE_URL } from './helpers.js';
+
+const PROBE_PAYLOAD = {
+  type: 'fhir-endpoint',
+  baseUrl: 'https://hapi.fhir.org/baseR4',
+};
 
 let server: FastifyInstance;
+let originalBudget: string | undefined;
 
 beforeAll(async () => {
-  server = await createTestServer();
+  originalBudget = process.env['RATE_LIMIT_PER_MINUTE'];
+  process.env['RATE_LIMIT_PER_MINUTE'] = '10';
+  server = await createServer(TEST_CONFIG);
+  await server.ready();
 });
 
 afterAll(async () => {
   await server.close();
+  if (originalBudget === undefined) {
+    delete process.env['RATE_LIMIT_PER_MINUTE'];
+  } else {
+    process.env['RATE_LIMIT_PER_MINUTE'] = originalBudget;
+  }
 });
 
-/** Send N requests with the same auth and return all responses */
 async function floodRequests(
   srv: FastifyInstance,
   n: number,
@@ -27,9 +41,10 @@ async function floodRequests(
   const results = [];
   for (let i = 0; i < n; i++) {
     const res = await srv.inject({
-      method: 'GET',
-      url: '/api/v1/billing/plans',
-      headers: { authorization: authHeader },
+      method: 'POST',
+      url: PROTECTED_PROBE_URL,
+      headers: { authorization: authHeader, 'content-type': 'application/json' },
+      payload: PROBE_PAYLOAD,
     });
     results.push({
       statusCode: res.statusCode,
@@ -39,11 +54,10 @@ async function floodRequests(
   return results;
 }
 
-describe('Rate limiting — free tier (10 req/min)', () => {
-  it('first 10 requests succeed, 11th is 429', async () => {
-    // Use a unique user ID per test run to avoid state bleed across tests
+describe('Rate limiting — single global budget (test override = 10/min)', () => {
+  it('first 10 requests succeed (or non-429), 11th is 429', async () => {
     const uniqueId = `rate-test-${Date.now()}`;
-    const token = makeJwt({ id: uniqueId, tier: 'free' });
+    const token = makeJwt({ id: uniqueId });
     const header = bearerHeader(token);
 
     const responses = await floodRequests(server, 11, header);
@@ -51,69 +65,48 @@ describe('Rate limiting — free tier (10 req/min)', () => {
     const eleventh = responses[10]!;
 
     for (const r of first10) {
-      expect(r.statusCode).toBe(200);
+      expect(r.statusCode).not.toBe(429);
     }
     expect(eleventh.statusCode).toBe(429);
   });
 
   it('429 response includes x-ratelimit-limit header', async () => {
     const uniqueId = `rate-header-${Date.now()}`;
-    const token = makeJwt({ id: uniqueId, tier: 'free' });
+    const token = makeJwt({ id: uniqueId });
     const header = bearerHeader(token);
 
-    // Exhaust + one over
     const responses = await floodRequests(server, 11, header);
     const limited = responses[10]!;
 
     expect(limited.statusCode).toBe(429);
-    // @fastify/rate-limit normalises header names to lowercase
     const limitHeader =
       limited.headers['x-ratelimit-limit'] ?? limited.headers['X-RateLimit-Limit'];
     expect(limitHeader).toBeDefined();
   });
 
-  it('429 response body contains retryAfter', async () => {
-    const uniqueId = `rate-retry-${Date.now()}`;
-    const token = makeJwt({ id: uniqueId, tier: 'free' });
-
-    const responses = await floodRequests(server, 11, bearerHeader(token));
-    const lastRes = await server.inject({
-      method: 'GET',
-      url: '/api/v1/billing/plans',
-      headers: { authorization: bearerHeader(token) },
-    });
-
-    // Find the 429 — could be response 10 (0-indexed) or beyond
-    const blocked = responses.find((r) => r.statusCode === 429) ?? lastRes;
-    expect(blocked.statusCode).toBe(429);
-  });
-
   it('different users have independent counters', async () => {
     const userA = `rate-a-${Date.now()}`;
     const userB = `rate-b-${Date.now()}`;
-    const tokenA = makeJwt({ id: userA, tier: 'free' });
-    const tokenB = makeJwt({ id: userB, tier: 'free' });
+    const tokenA = makeJwt({ id: userA });
+    const tokenB = makeJwt({ id: userB });
 
-    // Exhaust userA
     await floodRequests(server, 11, bearerHeader(tokenA));
 
-    // userB should still be allowed
     const res = await server.inject({
-      method: 'GET',
-      url: '/api/v1/billing/plans',
-      headers: { authorization: bearerHeader(tokenB) },
+      method: 'POST',
+      url: PROTECTED_PROBE_URL,
+      headers: { authorization: bearerHeader(tokenB), 'content-type': 'application/json' },
+      payload: PROBE_PAYLOAD,
     });
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode).not.toBe(429);
   });
 
   it('health endpoint is exempt from rate limiting', async () => {
     const uniqueId = `rate-health-${Date.now()}`;
-    const token = makeJwt({ id: uniqueId, tier: 'free' });
+    const token = makeJwt({ id: uniqueId });
 
-    // Exhaust the rate limit first
     await floodRequests(server, 11, bearerHeader(token));
 
-    // Health should still respond 200 (allowList bypass)
     const healthRes = await server.inject({ method: 'GET', url: '/api/v1/health' });
     expect(healthRes.statusCode).toBe(200);
   });

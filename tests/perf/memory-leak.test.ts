@@ -6,12 +6,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import {
-  createTestServer,
-  freeUserJwt,
-  bearerHeader,
-  MINIMAL_BUNDLE,
-} from '../integration/helpers.js';
+import { createTestServer, userJwt, bearerHeader, MINIMAL_BUNDLE } from '../integration/helpers.js';
 
 /** Minimal valid export body — uses fhir-endpoint connector with a blocked URL */
 const EXPORT_BODY = {
@@ -30,7 +25,7 @@ describe('Memory — export initiation RSS growth', () => {
 
   beforeAll(async () => {
     server = await createTestServer();
-    jwt = freeUserJwt();
+    jwt = userJwt();
   });
 
   afterAll(async () => {

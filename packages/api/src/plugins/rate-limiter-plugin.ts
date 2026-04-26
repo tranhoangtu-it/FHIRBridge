@@ -1,7 +1,7 @@
 /**
- * Rate limiter plugin — tier-aware sliding window rate limiting.
- * free tier: 10 requests/min, paid tier: 100 requests/min.
- * Uses Redis for distributed rate limiting when redisUrl is configured.
+ * Rate limiter plugin — sliding window rate limiting per authenticated user (or IP).
+ * Defaults to 100 requests/min — protects against runaway clients without limiting hospital ops.
+ * Uses Redis for distributed rate limiting when redisUrl is configured; falls back in-memory.
  */
 
 import fastifyRateLimit from '@fastify/rate-limit';
@@ -10,14 +10,13 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 
 import { skipOverride } from './plugin-utils.js';
 
-/** Rate limits per tier (requests per minute) */
-const TIER_LIMITS: Record<string, number> = {
-  free: 10,
-  paid: 100,
-};
+/** Default request budget per minute. Override via RATE_LIMIT_PER_MINUTE env if needed. */
+const DEFAULT_RATE_LIMIT_PER_MINUTE = 100;
 
 interface RateLimiterOptions {
   redisUrl?: string;
+  /** Optional override for the per-minute budget (used by tests / deployments needing tighter caps). */
+  maxPerMinute?: number;
 }
 
 async function _rateLimiterPlugin(
@@ -49,13 +48,15 @@ async function _rateLimiterPlugin(
     }
   }
 
+  const envBudget = Number(process.env['RATE_LIMIT_PER_MINUTE']);
+  const maxPerMinute =
+    opts.maxPerMinute ??
+    (Number.isFinite(envBudget) && envBudget > 0 ? envBudget : DEFAULT_RATE_LIMIT_PER_MINUTE);
+
   await fastify.register(fastifyRateLimit, {
     global: true,
     redis: redisClient,
-    max: (req: FastifyRequest) => {
-      const tier = req.authUser?.tier ?? 'free';
-      return TIER_LIMITS[tier] ?? TIER_LIMITS['free']!;
-    },
+    max: maxPerMinute,
     timeWindow: '1 minute',
     keyGenerator: (req: FastifyRequest) => req.authUser?.id ?? req.ip,
     allowList: (req: FastifyRequest) => req.url.split('?')[0] === '/api/v1/health',
@@ -74,7 +75,6 @@ async function _rateLimiterPlugin(
     },
   });
 
-  // Clean up Redis connection on server close
   if (redisClient) {
     const client = redisClient;
     fastify.addHook('onClose', async () => {

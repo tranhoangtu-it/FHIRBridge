@@ -8,7 +8,6 @@ import { HeroSection } from '../components/landing/hero-section';
 import { ProblemSection } from '../components/landing/problem-section';
 import { FeaturesSection } from '../components/landing/features-section';
 import { HowItWorksSection } from '../components/landing/how-it-works-section';
-import { PricingSection } from '../components/landing/pricing-section';
 import { SecuritySection } from '../components/landing/security-section';
 import { OpenSourceSection } from '../components/landing/open-source-section';
 import { FooterSection } from '../components/landing/footer-section';
@@ -21,7 +20,6 @@ export function LandingPage() {
       <ProblemSection />
       <FeaturesSection />
       <HowItWorksSection />
-      <PricingSection />
       <SecuritySection />
       <OpenSourceSection />
       <FooterSection />

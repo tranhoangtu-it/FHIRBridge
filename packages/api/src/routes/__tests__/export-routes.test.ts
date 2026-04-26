@@ -4,7 +4,7 @@
  *   GET    /api/v1/export/:id/status
  *   GET    /api/v1/export/:id/download
  *
- * Uses Fastify inject() with mocked ExportService and BillingService.
+ * Uses Fastify inject() with mocked ExportService.
  */
 
 import { describe, it, expect, beforeAll, afterAll, vi, beforeEach } from 'vitest';
@@ -15,20 +15,11 @@ import type { AuthUser } from '../auth-plugin.js';
 
 const mockStartExport = vi.fn().mockResolvedValue('export-id-123');
 const mockGetStatus = vi.fn();
-const mockCheckQuota = vi.fn().mockReturnValue({ allowed: true });
-const mockRecordUsage = vi.fn();
 
 vi.mock('../../services/export-service.js', () => ({
   ExportService: vi.fn().mockImplementation(() => ({
     startExport: mockStartExport,
     getStatus: mockGetStatus,
-  })),
-}));
-
-vi.mock('../../services/billing-service.js', () => ({
-  BillingService: vi.fn().mockImplementation(() => ({
-    checkQuota: mockCheckQuota,
-    recordUsage: mockRecordUsage,
   })),
 }));
 
@@ -42,9 +33,7 @@ const validBody = {
   connectorConfig: { type: 'fhir-endpoint', baseUrl: 'https://fhir.example.com' },
 };
 
-async function buildApp(
-  user: AuthUser | null = { id: 'user-1', tier: 'paid' },
-): Promise<FastifyInstance> {
+async function buildApp(user: AuthUser | null = { id: 'user-1' }): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
   app.decorateRequest('authUser', null);
   app.addHook('onRequest', async (request) => {
@@ -68,7 +57,6 @@ afterAll(async () => {
 beforeEach(() => {
   vi.clearAllMocks();
   mockStartExport.mockResolvedValue('export-id-123');
-  mockCheckQuota.mockReturnValue({ allowed: true });
 });
 
 // ── POST /api/v1/export ───────────────────────────────────────────────────────
@@ -84,29 +72,6 @@ describe('POST /api/v1/export', () => {
     const body = res.json();
     expect(body.exportId).toBe('export-id-123');
     expect(body.status).toBe('processing');
-  });
-
-  it('returns 402 when quota denied', async () => {
-    mockCheckQuota.mockReturnValueOnce({
-      allowed: false,
-      reason: 'Monthly export limit reached',
-      currentUsage: 5,
-      limit: 5,
-    });
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/export',
-      payload: validBody,
-    });
-    expect(res.statusCode).toBe(402);
-    const body = res.json();
-    expect(body.statusCode).toBe(402);
-    expect(body.error).toBe('Payment Required');
-  });
-
-  it('records usage after successful export initiation', async () => {
-    await app.inject({ method: 'POST', url: '/api/v1/export', payload: validBody });
-    expect(mockRecordUsage).toHaveBeenCalledWith('user-1', 'export');
   });
 
   it('returns 400 when patientId is missing', async () => {
@@ -156,7 +121,7 @@ describe('GET /api/v1/export/:id/download', () => {
     expect(res.headers['content-type']).toMatch(/application\/fhir\+json/);
   });
 
-  it('returns Content-Type application/fhir+ndjson for ndjson format (C-6: FHIR-correct MIME)', async () => {
+  it('returns 200 or 409 for ndjson streaming branch (raw stream bypasses inject body)', async () => {
     mockGetStatus.mockResolvedValueOnce({
       status: 'complete',
       userId: 'user-1',
@@ -166,9 +131,6 @@ describe('GET /api/v1/export/:id/download', () => {
       method: 'GET',
       url: '/api/v1/export/export-id-123/download?format=ndjson',
     });
-    // C-6: streaming path uses reply.hijack() + reply.raw, which bypasses Fastify inject response body.
-    // Status 200 confirms the route branch was reached; content-type set via raw.setHeader().
-    // In production, headers are verified via integration test with real HTTP connection.
     expect([200, 409]).toContain(res.statusCode);
   });
 

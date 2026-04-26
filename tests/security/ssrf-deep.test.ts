@@ -5,7 +5,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { createTestServer, paidUserJwt, bearerHeader } from '../integration/helpers.js';
+import { createTestServer, userJwt, bearerHeader } from '../integration/helpers.js';
 
 let server: FastifyInstance;
 
@@ -18,7 +18,7 @@ afterAll(async () => {
 });
 
 const PAID_HEADERS = {
-  authorization: bearerHeader(paidUserJwt()),
+  authorization: bearerHeader(userJwt()),
   'content-type': 'application/json',
 };
 

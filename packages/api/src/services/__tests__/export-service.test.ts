@@ -25,7 +25,7 @@ import * as CoreModule from '@fhirbridge/core';
  */
 function makeMockRequest(userId: string): FastifyRequest {
   return {
-    authUser: { id: userId, tier: 'paid' },
+    authUser: { id: userId },
   } as unknown as FastifyRequest;
 }
 

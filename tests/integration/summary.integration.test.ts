@@ -1,18 +1,11 @@
 /**
  * Integration tests — Summary routes.
- * Verifies tier gating (free -> 402, paid -> 202) and input validation.
+ * Self-host edition: no quota / tier gating; any authenticated user can request a summary.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import {
-  createTestServer,
-  freeUserJwt,
-  paidUserJwt,
-  makeJwt,
-  bearerHeader,
-  MINIMAL_BUNDLE,
-} from './helpers.js';
+import { createTestServer, userJwt, bearerHeader, MINIMAL_BUNDLE } from './helpers.js';
 
 let server: FastifyInstance;
 
@@ -25,12 +18,12 @@ afterAll(async () => {
 });
 
 describe('POST /api/v1/summary/generate', () => {
-  it('paid user with valid bundle returns 202', async () => {
+  it('authenticated user with valid bundle returns 202', async () => {
     const res = await server.inject({
       method: 'POST',
       url: '/api/v1/summary/generate',
       headers: {
-        authorization: bearerHeader(paidUserJwt()),
+        authorization: bearerHeader(userJwt('summary-ok')),
         'content-type': 'application/json',
       },
       payload: { bundle: MINIMAL_BUNDLE },
@@ -42,29 +35,12 @@ describe('POST /api/v1/summary/generate', () => {
     expect(body.status).toBe('processing');
   });
 
-  it('free tier user receives 402 (AI summaries not included)', async () => {
-    // Fresh user to avoid rate-limit interactions
-    const freshFreeToken = makeJwt({ id: `summary-free-${Date.now()}`, tier: 'free' });
-    const res = await server.inject({
-      method: 'POST',
-      url: '/api/v1/summary/generate',
-      headers: {
-        authorization: bearerHeader(freshFreeToken),
-        'content-type': 'application/json',
-      },
-      payload: { bundle: MINIMAL_BUNDLE },
-    });
-    expect(res.statusCode).toBe(402);
-    const body = res.json();
-    expect(body.error).toBe('Payment Required');
-  });
-
   it('missing bundle field returns 400', async () => {
     const res = await server.inject({
       method: 'POST',
       url: '/api/v1/summary/generate',
       headers: {
-        authorization: bearerHeader(paidUserJwt()),
+        authorization: bearerHeader(userJwt('summary-missing')),
         'content-type': 'application/json',
       },
       payload: {},
@@ -72,17 +48,16 @@ describe('POST /api/v1/summary/generate', () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it('empty body returns 400', async () => {
+  it('empty body returns 400 or 415', async () => {
     const res = await server.inject({
       method: 'POST',
       url: '/api/v1/summary/generate',
       headers: {
-        authorization: bearerHeader(paidUserJwt()),
+        authorization: bearerHeader(userJwt('summary-empty')),
         'content-type': 'application/json',
       },
       payload: null,
     });
-    // Fastify rejects empty body for routes that expect JSON
     expect([400, 415]).toContain(res.statusCode);
   });
 
@@ -102,18 +77,18 @@ describe('GET /api/v1/summary/:id/download', () => {
     const res = await server.inject({
       method: 'GET',
       url: '/api/v1/summary/00000000-0000-0000-0000-000000000000/download',
-      headers: { authorization: bearerHeader(paidUserJwt()) },
+      headers: { authorization: bearerHeader(userJwt('summary-404')) },
     });
     expect(res.statusCode).toBe(404);
   });
 
-  it('returns 409 (Conflict) if summary is still processing', async () => {
-    // Start a summary job
+  it('returns 409 (Conflict) or 200 if summary is processing/complete', async () => {
+    const callerToken = userJwt('summary-processing');
     const postRes = await server.inject({
       method: 'POST',
       url: '/api/v1/summary/generate',
       headers: {
-        authorization: bearerHeader(paidUserJwt()),
+        authorization: bearerHeader(callerToken),
         'content-type': 'application/json',
       },
       payload: { bundle: MINIMAL_BUNDLE },
@@ -121,13 +96,11 @@ describe('GET /api/v1/summary/:id/download', () => {
     expect(postRes.statusCode).toBe(202);
     const { summaryId } = postRes.json();
 
-    // Immediately try to download — will be 'processing' still
     const downloadRes = await server.inject({
       method: 'GET',
       url: `/api/v1/summary/${summaryId}/download`,
-      headers: { authorization: bearerHeader(paidUserJwt()) },
+      headers: { authorization: bearerHeader(callerToken) },
     });
-    // Either 409 (still processing) or 200 (completed fast) — both valid
     expect([200, 409]).toContain(downloadRes.statusCode);
   });
 });

@@ -117,7 +117,7 @@ const SECURITY_FEATURES = [
       </svg>
     ),
     title: 'Rate Limiting',
-    desc: 'Per-user and per-IP throttling prevents abuse and ensures fair usage across all tiers.',
+    desc: 'Per-user and per-IP throttling prevents abuse and protects upstream HIS endpoints.',
   },
   {
     icon: (

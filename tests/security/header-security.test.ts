@@ -5,7 +5,12 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { createTestServer, paidUserJwt, bearerHeader } from '../integration/helpers.js';
+import {
+  createTestServer,
+  userJwt,
+  bearerHeader,
+  PROTECTED_PROBE_URL,
+} from '../integration/helpers.js';
 
 let server: FastifyInstance;
 
@@ -17,6 +22,11 @@ afterAll(async () => {
   await server.close();
 });
 
+const PROBE_PAYLOAD = {
+  type: 'fhir-endpoint',
+  baseUrl: 'https://hapi.fhir.org/baseR4',
+};
+
 // ---------------------------------------------------------------------------
 // Server header — must not expose version/technology fingerprint
 // ---------------------------------------------------------------------------
@@ -25,7 +35,6 @@ describe('Response headers — Server header info-leak', () => {
   it('GET /api/v1/health does not expose detailed Server header', async () => {
     const res = await server.inject({ method: 'GET', url: '/api/v1/health' });
     const serverHeader = res.headers['server'];
-    // If the header exists it must not include version numbers or "fastify"
     if (serverHeader) {
       expect(serverHeader).not.toMatch(/fastify\/\d/i);
       expect(serverHeader).not.toMatch(/node\/\d/i);
@@ -34,7 +43,7 @@ describe('Response headers — Server header info-leak', () => {
   });
 
   it('401 error response does not expose Server version', async () => {
-    const res = await server.inject({ method: 'GET', url: '/api/v1/billing/plans' });
+    const res = await server.inject({ method: 'POST', url: PROTECTED_PROBE_URL });
     const serverHeader = res.headers['server'];
     if (serverHeader) {
       expect(serverHeader).not.toMatch(/\d+\.\d+\.\d+/);
@@ -59,7 +68,7 @@ describe('Error responses — no stack traces', () => {
   });
 
   it('401 response body does not contain a stack trace', async () => {
-    const res = await server.inject({ method: 'GET', url: '/api/v1/billing/plans' });
+    const res = await server.inject({ method: 'POST', url: PROTECTED_PROBE_URL });
     expect(res.statusCode).toBe(401);
     const body = res.json<Record<string, unknown>>();
     expect(body).not.toHaveProperty('stack');
@@ -71,10 +80,9 @@ describe('Error responses — no stack traces', () => {
       method: 'POST',
       url: '/api/v1/export',
       headers: {
-        authorization: bearerHeader(paidUserJwt()),
+        authorization: bearerHeader(userJwt('header-validation')),
         'content-type': 'application/json',
       },
-      // Intentionally missing required fields to trigger schema validation error
       payload: {},
     });
     expect([400, 422]).toContain(res.statusCode);
@@ -89,7 +97,7 @@ describe('Error responses — no stack traces', () => {
       method: 'POST',
       url: '/api/v1/export',
       headers: {
-        authorization: bearerHeader(paidUserJwt()),
+        authorization: bearerHeader(userJwt('header-malformed')),
         'content-type': 'application/json',
       },
       payload: '{ not valid json :::',
@@ -111,7 +119,7 @@ describe('Response headers — Content-Type correctness', () => {
   });
 
   it('401 error response has application/json Content-Type', async () => {
-    const res = await server.inject({ method: 'GET', url: '/api/v1/billing/plans' });
+    const res = await server.inject({ method: 'POST', url: PROTECTED_PROBE_URL });
     expect(res.headers['content-type']).toMatch(/application\/json/);
   });
 
@@ -120,13 +128,17 @@ describe('Response headers — Content-Type correctness', () => {
     expect(res.headers['content-type']).toMatch(/application\/json/);
   });
 
-  it('200 billing plans response has application/json Content-Type', async () => {
+  it('200 response on probe route has application/json Content-Type', async () => {
     const res = await server.inject({
-      method: 'GET',
-      url: '/api/v1/billing/plans',
-      headers: { authorization: bearerHeader(paidUserJwt()) },
+      method: 'POST',
+      url: PROTECTED_PROBE_URL,
+      headers: {
+        authorization: bearerHeader(userJwt('header-200')),
+        'content-type': 'application/json',
+      },
+      payload: PROBE_PAYLOAD,
     });
-    expect(res.statusCode).toBe(200);
+    expect([200, 502]).toContain(res.statusCode); // network failure to upstream FHIR yields 502
     expect(res.headers['content-type']).toMatch(/application\/json/);
   });
 });

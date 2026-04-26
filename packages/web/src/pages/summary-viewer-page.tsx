@@ -43,7 +43,7 @@ export function SummaryViewerPage() {
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
 
-  // BAA gate — first-time acknowledgment khi hosted tier bật AI
+  // BAA gate — first-time acknowledgment trước khi gửi data ra AI provider
   const baa = useBaaAcknowledgment();
 
   // Consent gate — phải đồng ý xử lý dữ liệu xuyên biên giới trước khi gọi AI
@@ -117,7 +117,7 @@ export function SummaryViewerPage() {
     if (!baa.acknowledged) {
       const acked = await baa.requestAcknowledgment();
       if (!acked) {
-        setGenError('Bạn cần xác nhận BAA disclaimer để dùng AI Summary trên hosted tier.');
+        setGenError('Bạn cần xác nhận BAA disclaimer trước khi sử dụng AI Summary.');
         return;
       }
     }
@@ -199,7 +199,7 @@ export function SummaryViewerPage() {
         )}
       </div>
 
-      {/* BAA disclaimer modal — hiện lần đầu user bật AI trên hosted tier */}
+      {/* BAA disclaimer modal — hiện lần đầu user bật AI summary */}
       <BaaDisclaimerModal baa={baa} />
 
       {/* Cross-border consent modal — hiện mỗi request AI nếu chưa có consent */}
