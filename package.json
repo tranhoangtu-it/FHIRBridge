@@ -2,7 +2,29 @@
   "name": "fhirbridge",
   "version": "0.1.0",
   "private": true,
-  "description": "FHIR R4 patient data portability tool with AI summaries",
+  "description": "Open-source, self-hosted FHIR R4 patient data portability tool with optional AI summaries. Hospitals and clinics pull and run it on their own infrastructure.",
+  "license": "MIT",
+  "author": "tranhoangtu-it",
+  "homepage": "https://github.com/tranhoangtu-it/FHIRBridge#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tranhoangtu-it/FHIRBridge.git"
+  },
+  "bugs": {
+    "url": "https://github.com/tranhoangtu-it/FHIRBridge/issues"
+  },
+  "keywords": [
+    "fhir",
+    "fhir-r4",
+    "healthcare",
+    "patient-data",
+    "ips",
+    "interoperability",
+    "self-hosted",
+    "open-source",
+    "deidentification",
+    "ai-summary"
+  ],
   "engines": {
     "node": ">=20",
     "pnpm": ">=9"
