@@ -86,22 +86,6 @@ export type { FhirComposition } from './ai/summary-formatter.js';
 export { TokenTracker } from './ai/token-tracker.js';
 export type { TokenRecord, AggregatedTokenUsage } from './ai/token-tracker.js';
 
-// ── Billing ──────────────────────────────────────────────────────────────────
-export { PLANS, getPlan, canExport, canUseSummary, calculateOverageCost } from './billing/index.js';
-export {
-  recordExport,
-  recordSummary,
-  getUsage,
-  resetPeriod,
-  currentPeriod,
-} from './billing/index.js';
-export type { PaymentProviderAdapter, WebhookEvent, IUsageTracker } from './billing/index.js';
-export { StripeProvider } from './billing/index.js';
-export { SepayProvider } from './billing/index.js';
-export { InMemoryUsageTracker } from './billing/index.js';
-export { InMemoryNonceStore } from './billing/index.js';
-export type { INonceStore } from './billing/index.js';
-
 // ── Security utilities ───────────────────────────────────────────────────────
 export { validateBaseUrl, validateBaseUrlWithDns } from './security/index.js';
 export type { ValidateBaseUrlResult } from './security/index.js';

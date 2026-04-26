@@ -82,12 +82,7 @@ describe('SummaryService IDOR — C-2 ownership enforcement', () => {
   it('emits audit log entry on cross-tenant denial (AC-2)', async () => {
     const sink = new CapturingAuditSink();
     const audit = new AuditService(sink);
-    const svc = new SummaryService(
-      undefined,
-      undefined,
-      audit,
-      'test-salt-32-chars-min-required-here',
-    );
+    const svc = new SummaryService(undefined, audit, 'test-salt-32-chars-min-required-here');
 
     const id = await svc.startGeneration({
       bundle: buildBundle(),
@@ -114,12 +109,7 @@ describe('SummaryService IDOR — C-2 ownership enforcement', () => {
   it('does NOT emit audit on legitimate access', async () => {
     const sink = new CapturingAuditSink();
     const audit = new AuditService(sink);
-    const svc = new SummaryService(
-      undefined,
-      undefined,
-      audit,
-      'test-salt-32-chars-min-required-here',
-    );
+    const svc = new SummaryService(undefined, audit, 'test-salt-32-chars-min-required-here');
 
     const id = await svc.startGeneration({
       bundle: buildBundle(),
@@ -134,12 +124,7 @@ describe('SummaryService IDOR — C-2 ownership enforcement', () => {
   it('does NOT emit audit when record does not exist', async () => {
     const sink = new CapturingAuditSink();
     const audit = new AuditService(sink);
-    const svc = new SummaryService(
-      undefined,
-      undefined,
-      audit,
-      'test-salt-32-chars-min-required-here',
-    );
+    const svc = new SummaryService(undefined, audit, 'test-salt-32-chars-min-required-here');
 
     await svc.getStatus('non-existent-id', 'any-user');
     expect(sink.entries).toHaveLength(0);

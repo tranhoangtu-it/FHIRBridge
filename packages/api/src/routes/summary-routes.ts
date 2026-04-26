@@ -3,8 +3,8 @@
  *   POST /api/v1/summary/generate    — generate AI summary
  *   GET  /api/v1/summary/:id/download — download formatted summary
  *
- * Quota enforcement: AI summaries are only available on paid tier.
- * Returns 402 Payment Required if user is on free tier.
+ * Self-host edition: AI summaries available to any authenticated user.
+ * Operator must provide ANTHROPIC_API_KEY or OPENAI_API_KEY in env.
  *
  * Bảo mật C-2 (IDOR): tất cả route đều pass userId để enforce ownership.
  * getStatus() trả undefined khi userId không khớp → route trả 404.
@@ -14,7 +14,6 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { Bundle } from '@fhirbridge/types';
 import type { ApiConfig } from '../config.js';
 import { SummaryService, type SummaryRequestOptions } from '../services/summary-service.js';
-import { BillingService } from '../services/billing-service.js';
 import { postSummaryGenerateSchema, getSummaryDownloadSchema } from '../schemas/summary-schemas.js';
 
 interface SummaryGenerateBody {
@@ -32,7 +31,6 @@ interface DownloadQuery {
 }
 
 const summaryService = new SummaryService();
-const billingService = new BillingService();
 
 export async function summaryRoutes(
   fastify: FastifyInstance,
@@ -54,17 +52,6 @@ export async function summaryRoutes(
       }
 
       const userId = request.authUser?.id ?? 'anonymous';
-      const tier = request.authUser?.tier ?? 'free';
-
-      // Quota check: AI summaries require paid tier
-      const quota = billingService.checkQuota(userId, tier, 'summary');
-      if (!quota.allowed) {
-        return reply.status(402).send({
-          statusCode: 402,
-          error: 'Payment Required',
-          message: quota.reason ?? 'AI summaries require a paid subscription ($5/month).',
-        });
-      }
 
       const summaryId = await summaryService.startGeneration({
         bundle,
@@ -72,9 +59,6 @@ export async function summaryRoutes(
         hmacSecret: opts.config.hmacSecret,
         userId,
       });
-
-      // Record usage after successful summary initiation
-      billingService.recordUsage(userId, 'summary');
 
       return reply.status(202).send({ summaryId, status: 'processing' });
     },
@@ -88,7 +72,7 @@ export async function summaryRoutes(
       request: FastifyRequest<{ Params: IdParams; Querystring: DownloadQuery }>,
       reply: FastifyReply,
     ) => {
-      // IDOR protection: pass userId agar getStatus() enforce ownership
+      // IDOR protection: pass userId so getStatus() enforces ownership
       const callerUserId = request.authUser?.id ?? 'anonymous';
       const record = await summaryService.getStatus(request.params.id, callerUserId);
       if (!record) {

@@ -10,7 +10,7 @@ const COLUMNS = [
     heading: 'Product',
     links: [
       { label: 'Features', href: '#features' },
-      { label: 'Pricing', href: '#pricing' },
+      { label: 'Self-host guide', href: `${ROUTES.GITHUB}#quickstart`, external: true },
       { label: 'CLI', href: ROUTES.GITHUB, external: true },
       { label: 'REST API', href: ROUTES.GITHUB, external: true },
     ],

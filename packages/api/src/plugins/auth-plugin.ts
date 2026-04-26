@@ -13,12 +13,11 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import fastifyJwt from '@fastify/jwt';
-import type { ApiConfig, UserTier } from '../config.js';
+import type { ApiConfig } from '../config.js';
 import { skipOverride } from './plugin-utils.js';
 
 export interface AuthUser {
   id: string;
-  tier: UserTier;
 }
 
 // Augment FastifyRequest to carry typed user info
@@ -88,16 +87,15 @@ async function _authPlugin(fastify: FastifyInstance, opts: { config: ApiConfig }
           .send({ statusCode: 401, error: 'Unauthorized', message: 'Invalid API key' });
       }
       // Dùng SHA-256 prefix thay vì raw key prefix
-      request.authUser = { id: `apikey:${apiKeyToId(apiKey)}`, tier: 'paid' };
+      request.authUser = { id: `apikey:${apiKeyToId(apiKey)}` };
       return;
     }
 
     if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
       try {
-        const decoded = await request.jwtVerify<{ sub?: string; id?: string; tier?: string }>();
+        const decoded = await request.jwtVerify<{ sub?: string; id?: string }>();
         const id = decoded.sub ?? decoded.id ?? 'unknown';
-        const tier: UserTier = decoded.tier === 'paid' ? 'paid' : 'free';
-        request.authUser = { id, tier };
+        request.authUser = { id };
         return;
       } catch {
         return reply

@@ -190,9 +190,6 @@ importers:
       pdfkit:
         specifier: ^0.18.0
         version: 0.18.0
-      stripe:
-        specifier: ^20.4.1
-        version: 20.4.1(@types/node@22.19.15)
       uuid:
         specifier: ^14.0.0
         version: 14.0.0
@@ -6560,18 +6557,6 @@ packages:
         integrity: sha512-8r3mkIM/2+PpjHoOtiAW8Rg3jJLHaV7xPwG+YRGrv6FP0wwk/toTpATxWYOW0BKdWwl82VT2tFYi5DlROa0Mxg==,
       }
 
-  stripe@20.4.1:
-    resolution:
-      {
-        integrity: sha512-axCguHItc8Sxt0HC6aSkdVRPffjYPV7EQqZRb2GkIa8FzWDycE7nHJM19C6xAIynH1Qp1/BHiopSi96jGBxT0w==,
-      }
-    engines: { node: '>=16' }
-    peerDependencies:
-      '@types/node': '>=16'
-    peerDependenciesMeta:
-      '@types/node':
-        optional: true
-
   style-to-js@1.1.21:
     resolution:
       {
@@ -11216,10 +11201,6 @@ snapshots:
   strip-literal@3.1.0:
     dependencies:
       js-tokens: 9.0.1
-
-  stripe@20.4.1(@types/node@22.19.15):
-    optionalDependencies:
-      '@types/node': 22.19.15
 
   style-to-js@1.1.21:
     dependencies:

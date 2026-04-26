@@ -66,7 +66,7 @@ async function _swaggerPlugin(fastify: FastifyInstance): Promise<void> {
         { name: 'health', description: 'Health check endpoints' },
         { name: 'export', description: 'FHIR R4 data export' },
         { name: 'summary', description: 'AI-powered patient summary generation' },
-        { name: 'billing', description: 'Billing, quotas, and payment webhooks' },
+        { name: 'consent', description: 'Cross-border AI consent records' },
         { name: 'connector', description: 'HIS connector management' },
       ],
     },

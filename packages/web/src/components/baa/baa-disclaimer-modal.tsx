@@ -1,10 +1,10 @@
 /**
  * BaaDisclaimerModal — modal blocking đầu tiên khi user bật AI Summary.
  *
- * Hiển thị cảnh báo HIPAA/BAA cho hosted tier:
- * - Anthropic/OpenAI không có BAA với FHIRBridge hosted
- * - Chỉ dành cho cá nhân tự xuất dữ liệu của mình
- * - Khuyến nghị self-host nếu là covered entity
+ * Hiển thị cảnh báo HIPAA/BAA trước khi gửi data ra AI provider:
+ * - Anthropic/OpenAI không cấp BAA cho cá nhân/self-host nhỏ
+ * - Operator (bệnh viện/phòng khám) tự chịu trách nhiệm nếu là covered entity
+ * - Khuyến nghị tự ký BAA riêng nếu xử lý PHI quy mô production
  *
  * A11y: focus trap, keyboard Escape để cancel, aria-modal, aria-labelledby.
  * I18n: strings từ namespace 'baa' qua useTranslation.

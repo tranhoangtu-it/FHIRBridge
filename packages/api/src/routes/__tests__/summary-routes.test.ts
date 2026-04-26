@@ -3,7 +3,7 @@
  *   POST /api/v1/summary/generate
  *   GET  /api/v1/summary/:id/download
  *
- * Uses Fastify inject() with mocked SummaryService and BillingService.
+ * Uses Fastify inject() with mocked SummaryService.
  */
 
 import { describe, it, expect, beforeAll, afterAll, vi, beforeEach } from 'vitest';
@@ -15,20 +15,11 @@ import type { ApiConfig } from '../../config.js';
 
 const mockStartGeneration = vi.fn().mockResolvedValue('summary-id-abc');
 const mockGetSummaryStatus = vi.fn();
-const mockCheckQuota = vi.fn().mockReturnValue({ allowed: true });
-const mockRecordUsage = vi.fn();
 
 vi.mock('../../services/summary-service.js', () => ({
   SummaryService: vi.fn().mockImplementation(() => ({
     startGeneration: mockStartGeneration,
     getStatus: mockGetSummaryStatus,
-  })),
-}));
-
-vi.mock('../../services/billing-service.js', () => ({
-  BillingService: vi.fn().mockImplementation(() => ({
-    checkQuota: mockCheckQuota,
-    recordUsage: mockRecordUsage,
   })),
 }));
 
@@ -52,9 +43,7 @@ const validBundle = {
   entry: [],
 };
 
-async function buildApp(
-  user: AuthUser | null = { id: 'user-1', tier: 'paid' },
-): Promise<FastifyInstance> {
+async function buildApp(user: AuthUser | null = { id: 'user-1' }): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
   app.decorateRequest('authUser', null);
   app.addHook('onRequest', async (request) => {
@@ -78,7 +67,6 @@ afterAll(async () => {
 beforeEach(() => {
   vi.clearAllMocks();
   mockStartGeneration.mockResolvedValue('summary-id-abc');
-  mockCheckQuota.mockReturnValue({ allowed: true });
 });
 
 // ── POST /api/v1/summary/generate ────────────────────────────────────────────
@@ -103,30 +91,6 @@ describe('POST /api/v1/summary/generate', () => {
       payload: {},
     });
     expect(res.statusCode).toBe(400);
-  });
-
-  it('returns 402 on free tier (quota denied)', async () => {
-    mockCheckQuota.mockReturnValueOnce({
-      allowed: false,
-      reason: 'AI summaries require a paid subscription',
-    });
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/summary/generate',
-      payload: { bundle: validBundle },
-    });
-    expect(res.statusCode).toBe(402);
-    const body = res.json();
-    expect(body.error).toBe('Payment Required');
-  });
-
-  it('records summary usage after successful initiation', async () => {
-    await app.inject({
-      method: 'POST',
-      url: '/api/v1/summary/generate',
-      payload: { bundle: validBundle },
-    });
-    expect(mockRecordUsage).toHaveBeenCalledWith('user-1', 'summary');
   });
 });
 

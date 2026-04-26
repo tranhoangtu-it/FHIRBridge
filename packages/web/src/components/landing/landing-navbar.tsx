@@ -9,7 +9,7 @@ import { ROUTES } from '../../lib/constants';
 
 const NAV_LINKS = [
   { label: 'Features', href: '#features' },
-  { label: 'Pricing', href: '#pricing' },
+  { label: 'Self-host', href: '#open-source' },
   { label: 'Docs', href: 'https://github.com/tranhoangtu-it/FHIRBridge/wiki', external: true },
   { label: 'GitHub', href: ROUTES.GITHUB, external: true },
 ];

@@ -8,7 +8,6 @@ import { createHmac, randomUUID } from 'node:crypto';
 import { ProviderGateway, formatMarkdown } from '@fhirbridge/core';
 import type { Bundle, SummaryConfig, PatientSummary } from '@fhirbridge/types';
 import type { IRedisStore } from './redis-store.js';
-import type { WebhookDispatcher, WebhookEvent } from './webhook-dispatcher.js';
 import type { AuditService } from './audit-service.js';
 
 export interface SummaryRequestOptions {
@@ -41,13 +40,11 @@ export interface SummaryRecord {
 const SUMMARY_TTL_SECONDS = 10 * 60;
 const STORE_TTL_MS = SUMMARY_TTL_SECONDS * 1000;
 
-/** Resolve AI provider name to SummaryConfig-compatible provider name */
 function resolveProvider(provider?: string): 'claude' | 'openai' {
   if (provider === 'openai') return 'openai';
   return 'claude';
 }
 
-/** Build a full SummaryConfig from partial options */
 function buildSummaryConfig(
   options: SummaryRequestOptions = {},
   hmacSecret: string,
@@ -82,18 +79,11 @@ function hashUserId(userId: string, secret: string): string {
 export class SummaryService {
   private readonly memStore = new Map<string, SummaryRecord>();
   private readonly redis: IRedisStore | null;
-  private readonly webhookDispatcher: WebhookDispatcher | null;
   private readonly auditService: AuditService | null;
   private readonly auditHashSalt: string;
 
-  constructor(
-    redisStore?: IRedisStore,
-    webhookDispatcher?: WebhookDispatcher,
-    auditService?: AuditService,
-    auditHashSalt?: string,
-  ) {
+  constructor(redisStore?: IRedisStore, auditService?: AuditService, auditHashSalt?: string) {
     this.redis = redisStore ?? null;
-    this.webhookDispatcher = webhookDispatcher ?? null;
     this.auditService = auditService ?? null;
     this.auditHashSalt =
       auditHashSalt ?? process.env['HMAC_SECRET'] ?? 'dev-only-fallback-salt-32-chars-min';
@@ -138,7 +128,6 @@ export class SummaryService {
   /**
    * Lấy trạng thái summary job.
    * Nếu truyền userId, kiểm tra ownership — trả undefined nếu không khớp (treat as 404).
-   * Caller dùng undefined để trả 404 (không lộ 403 timing).
    */
   async getStatus(summaryId: string, userId?: string): Promise<SummaryRecord | undefined> {
     this.evictExpiredMemory();
@@ -166,7 +155,6 @@ export class SummaryService {
   /** Internal: run the full AI pipeline */
   private async runGeneration(summaryId: string, request: SummaryRequest): Promise<void> {
     const record = (await this.loadRecord(summaryId))!;
-    const startTime = record.createdAt;
     try {
       const config = buildSummaryConfig(request.summaryConfig, request.hmacSecret);
       const gateway = new ProviderGateway(config);
@@ -176,24 +164,6 @@ export class SummaryService {
       record.formattedMarkdown = formatMarkdown(summary);
       record.status = 'complete';
       await this.storeRecord(summaryId, record);
-
-      // Emit summary.completed webhook event — fire-and-forget
-      if (this.webhookDispatcher) {
-        const event: WebhookEvent = {
-          id: `evt_${randomUUID()}`,
-          type: 'summary.completed',
-          created: Math.floor(Date.now() / 1000),
-          api_version: 'v1',
-          data: {
-            summary_id: summaryId,
-            // Hash userId để không log raw ID — HMAC dùng audit-salt nhất quán với ExportService
-            user_id_hash: summaryId.slice(0, 16),
-            language: request.summaryConfig?.language ?? 'en',
-            duration_ms: Date.now() - startTime,
-          },
-        };
-        void this.webhookDispatcher.dispatch(event, record.userId);
-      }
     } catch (err) {
       record.status = 'failed';
       record.error = err instanceof Error ? err.message : 'Summary generation failed';
